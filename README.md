@@ -1,4 +1,4 @@
-# claude-skills
+# biot-awesome-skills
 
 Personal Claude Code skills for session management and productivity.
 
@@ -19,6 +19,7 @@ done
 |-------|-------------|
 | `context-save` | Snapshot session state (branch, decisions, findings) to `~/.claude/contexts/` |
 | `context-restore` | Search and load saved contexts to resume prior work |
+| `deep-investigate` | Evidence-driven investigation for hard bugs — enforces prove-don't-pattern-match |
 
 ## Adding a new skill
 
