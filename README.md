@@ -20,6 +20,7 @@ done
 | `context-save` | Snapshot session state (branch, decisions, findings) to `~/.claude/contexts/` |
 | `context-restore` | Search and load saved contexts to resume prior work |
 | `deep-investigate` | Evidence-driven investigation for hard bugs — enforces prove-don't-pattern-match |
+| `deep-understand` | Deep understanding of existing code/systems — WHY it exists, how it flows, what shaped it |
 
 ## Adding a new skill
 
