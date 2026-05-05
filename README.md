@@ -28,3 +28,7 @@ done
 2. Add `my-skill/SKILL.md` with YAML frontmatter (`name`, `description`) + instructions
 3. Symlink: `ln -sfn "$(pwd)/my-skill" ~/.claude/skills/my-skill`
 4. Commit and push
+
+## Agent operating rules
+
+`AGENTS.md` holds the cross-agent engineering discipline rules (anti-rationalization checklist, verification gate, five non-negotiables). `CLAUDE.md` is a symlink to `AGENTS.md` so any agent — Claude Code, Codex, Cursor, etc. — reads the same instructions. Edit `AGENTS.md`; the symlink keeps `CLAUDE.md` in sync.
