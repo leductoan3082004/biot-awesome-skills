@@ -1,52 +1,63 @@
 ---
 name: context-save
-description: Snapshot current Claude Code session state to a persistent file outside the repo. Captures branch, commits, uncommitted diff, decisions, investigation findings, open questions, and mental model. Use when user says "save context", "checkpoint this", "remember where we are", "/context-save", before switching tasks/branches, or before ending a session you may resume later. Also use proactively when a session has accumulated significant investigation or decisions that would be painful to reconstruct. Stores under ~/.claude/contexts/<repo-slug>/ — never writes inside the working repo.
+description: Use when user wants to checkpoint or persist the current Claude Code session state to disk so it can be resumed later — same session, new session, or different machine. Triggers on "save context", "checkpoint this", "remember where we are", "snapshot the session", "save my progress", "/context-save", or before known interruption points (switching branches, ending session, switching tasks). Captures branch, commits, uncommitted diff, decisions, investigation findings, open questions, and mental model. Stores under ~/.claude/contexts/<repo-slug>/ — never writes inside the working repo. The saved file is exhaustive by design — required fields are required, no shortcuts.
 ---
 
 # context-save
 
-Persists session state so a future session (same or different day, same or different repo checkout) can resume with full context. Think of it as a bookmark for your brain — everything you'd need to tell a colleague picking up your work.
+Persist enough of the current session state that a future session — same person or different agent — can resume the work without re-doing investigation, re-asking the user, or re-discovering decisions.
 
-## Storage location
+**Core principle:** A save is a contract with future-you. If a required field is empty, the contract is broken — the resume will fail in subtle ways that look like progress.
 
-**Never write inside the working repo.** Always write to:
+**Iron rule:** Never write inside the working repo. Saves go to `~/.claude/contexts/<repo-slug>/`. This isolates session memory from project history, survives branch switches, survives clones, and avoids polluting the user's PRs with planning artifacts.
+
+## Storage Location
 
 ```
 ~/.claude/contexts/<repo-slug>/<timestamp>-<short-topic>.md
 ```
 
-- `<repo-slug>` = absolute repo path with `/` replaced by `-`, leading `-` stripped.
+- `<repo-slug>` = absolute path of the repo with `/` → `-`, leading `-` stripped.
   Example: `/Users/toale/Developer/iris` → `Users-toale-Developer-iris`
-- `<timestamp>` = `YYYY-MM-DD-HHMM` (local time)
-- `<short-topic>` = 2-5 word kebab-case slug of current task (e.g. `rms-109955-placeholder-visibility`)
+- `<timestamp>` = `YYYY-MM-DD-HHMM` in local time
+- `<short-topic>` = 2-5 word kebab-case slug of the current task
 
-Create the directory if it doesn't exist (`mkdir -p`). This lives in `~/.claude/`, not in the user's repo — it survives branch switches, rebases, and worktree cleanup.
+Compute repo slug from `git rev-parse --show-toplevel`. If the user is not in a git repo, use the cwd absolute path with the same transformation, and note this in the save's frontmatter.
 
-## What to capture
+`mkdir -p` the directory. The directory lives in `~/.claude/`, never in the repo. This is non-negotiable — see Red Flags.
 
-A good save lets a future session pick up cold — no conversation history needed. Gather these before writing:
+## Required Fields (no shortcuts)
 
-### Always capture
+A save is incomplete if ANY of these is missing or empty. "Couldn't find" is acceptable when documented; silently skipping is not.
 
-1. **Session metadata** — date/time, repo path, current branch, working directory, git user
-2. **Task / goal** — one paragraph: what is the user trying to accomplish and why
-3. **Branch state** — output of `git status --short`, `git log -10 --oneline`, list of uncommitted files and their nature (new/modified/deleted)
-4. **Decisions made** — choices the user and agent made during the session and *why* (not just what). Include rejected alternatives and the reasoning.
-5. **Investigation findings** — files read, key code locations (`path:line`), patterns discovered, how components connect. This is often the most valuable part — reconstructing investigation from scratch is expensive.
-6. **Open questions / next steps** — what is unresolved, what to do first on resume, blockers
+### Frontmatter (machine-readable)
+- `saved_at` — ISO 8601 timestamp with timezone offset
+- `repo` — absolute path
+- `branch` — current branch (or `null` outside git)
+- `topic` — one short phrase
+- `tags` — list, may be empty `[]`
+- `jira` — ticket ID or `null`
+- `pr` — PR URL or `null`
+- `related_saves` — list of prior save filenames in same `<repo-slug>/` dir on the same topic/branch, may be empty `[]`
 
-### Include when relevant
+### Body sections (human-readable)
+- **Goal** — one paragraph: what the user is trying to accomplish and why
+- **Branch & commits** — branch name, base/merge-base SHA, last 10 commits, uncommitted file list
+- **Decisions** — every choice made and the *why* (not just the *what*). Empty = "no decisions made yet, just exploring" written explicitly.
+- **Investigation** — files read, key code locations as `path:line`, patterns discovered. Empty = "no investigation yet" written explicitly.
+- **Open questions / next steps** — what is unresolved, what to do first on resume. Empty = no save needed (nothing to resume).
+- **Resume hints** — first concrete action on resume + known gotchas
 
-7. **Related links** — Jira tickets (RMS-####), PR URLs, design docs, Slack threads, Quip docs
-8. **Failed approaches** — what was tried and rejected, with reason. Prevents re-treading dead ends.
-9. **Mental model / insights** — non-obvious things learned about how the system works, hidden coupling, gotchas discovered
-10. **Pending state** — long-running processes, dev servers running, agents in flight, test results waiting
-11. **Key code snippets** — small (<20 line) code blocks that are central to the investigation or decision. Don't dump entire files — reference by path:line instead.
-12. **Dependencies / blockers** — things that need to happen outside this session (PR review, backend deploy, team decision)
+### Conditional (include when relevant)
+- **Failed approaches** — what was tried and rejected, with reason
+- **Mental model / insights** — non-obvious things learned about the system
+- **Related links** — Jira tickets, PR URLs, design docs, Slack threads
+- **Pending tool state** — long-running processes, dev servers, agents in flight
+- **Key code snippets** — small (<20 line) blocks central to the investigation. Reference larger code by `path:line`, do not dump.
 
-## How to gather
+## Gather (before drafting)
 
-Run these commands in parallel to get repo state:
+Run these in parallel:
 
 ```bash
 git rev-parse --show-toplevel
@@ -54,101 +65,158 @@ git branch --show-current
 git status --short
 git log -10 --oneline
 git diff --stat
-date '+%Y-%m-%d %H:%M %Z'
+git merge-base HEAD master 2>/dev/null || git merge-base HEAD main 2>/dev/null
+date '+%Y-%m-%dT%H:%M%z'
 ```
 
-For task/decision/investigation content: extract from the conversation transcript. The user already said these things — don't ask them to repeat. Skim the full conversation and pull out:
+Pull task / decision / investigation content from the conversation transcript — do not ask the user to repeat themselves. Skim the transcript and extract:
 - Every decision or choice point
-- Every file that was read or modified
+- Every file read or modified
 - Every finding or "aha" moment
-- Every question that was asked but not fully resolved
+- Every question asked but not fully resolved
+- Every dead end ruled out
 
 If unsure whether something is worth capturing, include it. Storage is cheap; reconstructing lost context is expensive.
 
-## File format
-
-Use YAML frontmatter for machine-searchable metadata + structured markdown for the human-readable body.
+## File Format
 
 ```markdown
 ---
-saved_at: 2026-05-04T14:32-07:00
+saved_at: 2026-05-05T14:32-07:00
 repo: /Users/toale/Developer/iris
 branch: toale_axoncorp/RMS-109955-searchable-placeholder-visibility
 topic: searchable placeholder card visibility
-tags: [iris, form-card, RMS-109955, placeholder, visibility]
+tags: [iris, form-card, RMS-109955]
 jira: RMS-109955
 pr: null
-related_saves: []
+related_saves: [2026-05-04-1820-form-card-visibility.md]
 ---
 
-# Searchable Placeholder Card Visibility
+# Searchable placeholder card visibility
 
 ## Goal
 <1-paragraph statement of what the user is trying to do and why>
 
 ## Branch & commits
-- Branch: `toale_axoncorp/RMS-109955-searchable-placeholder-visibility`
-- Base: `master` (`abc1234`)
+- Branch: `<branch>`
+- Base: `<merge-base branch>` (`<sha>`)
 - Recent commits:
-  - `87ea60d` fix: keep unresolved entity-backed cards visible
+  - `<sha>` <subject>
   - ...
-- Uncommitted changes: <list, or "clean working tree">
+- Uncommitted: <list, or "clean">
 
 ## Decisions
-- **<decision>** — <why, what alternatives were considered>
+- **<decision>** — <why, alternatives considered>
 - ...
 
-## Investigation findings
-- `packages/iris/src/pages/standards/foo.tsx:142` — <what was found, why it matters>
+## Investigation
+- `<path:line>` — <what was found / why it matters>
 - ...
 
-## Open questions / next steps
-1. <concrete next action on resume>
-2. <unresolved question>
+## Open questions
+- <question or next step>
 - ...
 
 ## Failed approaches
 - <approach> — <why rejected>
 
 ## Mental model / insights
-- <non-obvious thing learned about how the system works>
+- <non-obvious thing learned>
 
 ## Related links
-- [RMS-109955](https://taserintl.atlassian.net/browse/RMS-109955)
+- [RMS-####](url)
 
 ## Resume hints
-- **Start by:** <first concrete action on resume>
-- **Watch out for:** <gotchas, things easy to forget>
-- **Dev environment state:** <servers running, build state, etc.>
+- Start by: <first concrete action on resume>
+- Watch out for: <gotchas>
+- Dev environment state: <servers running, agents in flight, etc.>
 ```
 
-## Linking related saves
+## Linking Related Saves
 
-If this save continues earlier work on the same topic/branch, populate `related_saves:` in frontmatter with prior filenames. This lets `context-restore` reconstruct a timeline across sessions.
-
-Before writing, check for prior saves in the same `<repo-slug>/` directory matching the branch or topic:
+Before writing, list existing saves in `~/.claude/contexts/<repo-slug>/`. If any prior save matches the current topic, branch, or Jira ticket, include its filename in `related_saves`. This lets `context-restore` reconstruct a timeline rather than treating each save as orphan.
 
 ```bash
-ls ~/.claude/contexts/<repo-slug>/ | grep -i "<topic-keyword>"
+ls -1 ~/.claude/contexts/<repo-slug>/ 2>/dev/null
+grep -l "branch: .*<current-branch>" ~/.claude/contexts/<repo-slug>/*.md 2>/dev/null
+grep -l "jira: <ticket>" ~/.claude/contexts/<repo-slug>/*.md 2>/dev/null
 ```
 
-If matches found, add their filenames to `related_saves:`.
+## Required Save Checklist
 
-## After saving
+Do **not** write the file until ALL of these are true:
+
+- [ ] Repo slug computed from `git rev-parse --show-toplevel` (or documented absolute cwd if not a repo)
+- [ ] `~/.claude/contexts/<repo-slug>/` exists (created via `mkdir -p`)
+- [ ] Filename uses `<timestamp>-<short-topic>.md` pattern
+- [ ] All frontmatter fields populated (`null` allowed only when truly absent, e.g. `pr: null` if no PR exists; placeholders like `<TODO>` are forbidden)
+- [ ] Goal paragraph written from conversation context, not from memory of similar sessions
+- [ ] Branch & commits captured from real `git` output, not guessed
+- [ ] Decisions section either lists decisions with *why*, or explicitly states "no decisions yet, exploration only"
+- [ ] Investigation section either lists `path:line` findings, or explicitly states "no investigation yet"
+- [ ] Open questions section has at least one concrete next step (otherwise — why save?)
+- [ ] Resume hints written for someone who walks in cold
+- [ ] Prior saves in same `<repo-slug>/` dir checked for `related_saves` links
+- [ ] Path is under `~/.claude/contexts/`, NOT inside the working repo
+
+After writing, **read the file back** and verify the frontmatter parses and required sections are populated. A save you didn't verify is a save you didn't actually save.
+
+## Output to User
+
+After saving:
 
 1. Print the absolute path of the saved file.
-2. Print a 2-3 line summary of what was captured (how many decisions, findings, open items).
-3. Do **not** commit the file — it lives outside the repo.
-4. Mention that `/context-restore` can reload this later.
+2. Print a 2-3 line summary: topic, branch, count of decisions / findings / open items.
+3. Mention any related saves linked.
+4. Mention that `/context-restore` can reload it.
+5. Do not commit the file (it's outside the repo by design).
 
-## When NOT to save
+## Rationalization Table — STOP if You Think These
 
-- Trivial sessions (one quick question, no investigation).
-- User explicitly said "don't save" or "ephemeral".
-- Session only involved reading docs or answering questions with no decisions/findings.
+| Excuse | Reality |
+|--------|---------|
+| "Session is short, skip the save" | Then user wouldn't have asked. If they invoked context-save, save it. |
+| "I'll capture only the highlights" | Future-you doesn't know which detail mattered. Required fields are required. |
+| "Decisions are obvious, skip that section" | Obvious to current-you ≠ obvious to next-session-you. Document the why. |
+| "Branch state is in git anyway, skip" | Save makes the snapshot atomic with the reasoning. Without it, restore can't know which commit the reasoning matched. |
+| "I'll write this directly into a doc in the repo" | No. Saves go to `~/.claude/contexts/`. Writing inside the repo pollutes PRs and history. |
+| "git status takes time, just paraphrase" | Paraphrase ≠ truth. Run the command. Cost: 1 second. |
+| "Open questions is just my todo list, skip" | The todo list IS the resume value. Without it, resume = re-derive what to do next from scratch. |
+| "Existing save is recent enough, no need" | A new save with `related_saves` link to the old one is cheap and lossless. Make a new one. |
+| "User said 'quick save', skip required fields" | "Quick save" = save without delay, not save with skipped fields. The fields are the contract. |
+| "Failed approaches don't matter once we move on" | They prevent next-session-you from re-trying them. Document them. |
+| "I read the file back? Trust the write" | File systems lie sometimes (perms, full disk, wrong path). Read back. |
+| "Investigation findings are too granular, summarize" | `path:line` references are the highest-value content for resume. Preserve them. |
 
-## Edge cases
+## Red Flags — STOP and Restart
 
-- **Multiple worktrees for same repo**: repo-slug uses the worktree's absolute path, so `/Users/toale/Developer/iris` and `/Users/toale/Developer/iris-worktree-1` get separate slugs. Mention this if the user works with worktrees.
-- **No git repo**: Use the working directory path as the slug. Note in the save that it's not a git repo.
-- **Sensitive content**: If the session involved credentials, tokens, or other secrets — do NOT include them in the save. Note their existence without the values.
+| Red flag | What to do |
+|----------|-----------|
+| About to write inside the working repo | Stop. Path must be under `~/.claude/contexts/`. Re-derive. |
+| Frontmatter has placeholder values like `<TODO>` or `???` | Stop. Either fill in or mark explicitly null. No placeholders ship. |
+| Decisions / Investigation sections empty without "(none)" note | Stop. Either populate or document the empty explicitly. |
+| Skipped `git status` / `git log` because "I remember" | Stop. Run the commands. Memory of git state is unreliable. |
+| Filename collision with existing save | Don't overwrite. Append `-2`, `-3` to topic, OR check if it's a duplicate-save attempt and ask the user. |
+| Path under `~/.claude/contexts/` doesn't yet exist | `mkdir -p` first. Don't fail silently. |
+| User in a non-git directory | Use cwd absolute path as repo-slug, document this in frontmatter. Do not abort. |
+| `related_saves` is empty but a prior save on same branch / Jira clearly exists | Stop. List the contexts dir, find the link, populate. |
+| Sensitive content (tokens, credentials, PII) about to be written | Stop. Reference its existence without value. Ask user before persisting. |
+
+## When NOT to Use This Skill
+
+- Trivial sessions (one quick question, no investigation, nothing to resume).
+- User explicitly said "don't save" / "ephemeral".
+- The user asked for documentation IN the repo (they want a real doc, not a session save) — point them at the right place; do not save here.
+- Sensitive content the user marked private — flag and ask before persisting.
+
+## Edge Cases
+
+- **Multiple worktrees of the same repo**: repo-slug uses the worktree's absolute path, so `/Users/toale/Developer/iris` and `/Users/toale/Developer/iris-worktree-1` get separate slugs. Mention this if relevant.
+- **No git repo**: Use cwd absolute path as the slug. Note `branch: null` and `repo` set to cwd in frontmatter.
+- **Sensitive content in conversation**: do not include credentials, tokens, or other secrets in the save. Note their existence ("API key handled in step 3") without the value.
+- **Filename collision**: do not overwrite. Append `-2`, `-3` to topic slug, or check if duplicate save attempt and ask user.
+
+## Related Skills
+
+- **context-restore** — The other half. Reads what this skill writes, reconstructs session state.
+- **deep-understand** — Saves are exactly the right place to checkpoint deep-understand findings during long investigations. The Search Ledger and decision table belong in the Investigation and Decisions sections.
