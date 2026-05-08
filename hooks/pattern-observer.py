@@ -13,8 +13,12 @@ Behavior model:
   - Lesson capture runs PARALLEL with the main task; user does NOT wait.
   - Agent SELF-EVALUATES worthiness; no confirmation prompt.
   - Compact bullet format with ❌ Bad / ✅ Good examples.
-  - Synced across ~/.claude/CLAUDE.md AND
-    ~/Developer/biot-awesome-skills/AGENTS.md.
+  - Examples MUST be generic (no project codenames, ticket IDs, or
+    internal artifact names) — pattern-level placeholders only.
+  - Routing:
+      Claude-specific lesson  → biot/CLAUDE.md (`~/.claude/CLAUDE.md`
+                                 is a symlink to it).
+      Agent-neutral lesson    → biot/AGENTS.md.
 """
 
 import json
@@ -26,10 +30,17 @@ import time
 
 STATE_DIR = os.path.expanduser("~/.claude/hooks/.state")
 STATE_FILE = os.path.join(STATE_DIR, "skill-usage.json")
-LESSONS_FILES = [
-    os.path.expanduser("~/.claude/CLAUDE.md"),
-    os.path.expanduser("~/Developer/biot-awesome-skills/AGENTS.md"),
-]
+# Lesson routing — single canonical target per scope. The agent classifies
+# the captured rule and writes to ONE of these:
+#   Claude-specific (default) → biot/CLAUDE.md
+#       (`~/.claude/CLAUDE.md` is a symlink to it.)
+#   Agent-neutral             → biot/AGENTS.md
+LESSONS_FILE_CLAUDE = os.path.expanduser(
+    "~/Developer/biot-awesome-skills/CLAUDE.md"
+)
+LESSONS_FILE_UNIVERSAL = os.path.expanduser(
+    "~/Developer/biot-awesome-skills/AGENTS.md"
+)
 LESSONS_HEADER = "## Lessons"
 
 SKILL_WINDOW_SECONDS = 300  # 5 min window for "recently active" skill
@@ -164,8 +175,6 @@ def matches(text, patterns):
 
 # ── Context builders ────────────────────────────────────────────────
 
-_FILES_LIST = "\n".join(f"       - {p}" for p in LESSONS_FILES)
-
 _SHARED_RULES = (
     "DO THE USER'S MAIN TASK FIRST — DO NOT BLOCK ON LESSON CAPTURE.\n"
     "Lesson capture runs IN PARALLEL with the main task (or right after a\n"
@@ -177,18 +186,30 @@ _SHARED_RULES = (
     "If not worthy: skip silently. No acknowledgment.\n\n"
     "Do NOT ask the user to confirm. Auto-save. Only ask if the rule is\n"
     "genuinely ambiguous AND you cannot form a clear bad/good example.\n\n"
-    "Storage — append a single compact bullet to BOTH files (keep in sync):\n"
-    f"{_FILES_LIST}\n"
-    f"under the `{LESSONS_HEADER}` section. If a `## Lessons Learned` section\n"
-    "already exists in the file, USE THAT existing section instead of creating\n"
-    "a new `## Lessons` (do not duplicate sections). If neither exists, create\n"
-    f"`{LESSONS_HEADER}` at the end of the file.\n"
-    "DO NOT use the old verbose template (### title / **Rule:** / **Why:** /\n"
-    "**How to apply:** / **Date:**). DO NOT create any new sub-section.\n\n"
+    "Storage — append a single compact bullet to ONE file based on scope:\n"
+    f"  Claude-specific (default) → {LESSONS_FILE_CLAUDE}\n"
+    f"  Agent-neutral             → {LESSONS_FILE_UNIVERSAL}\n"
+    "Pick AGENTS.md ONLY if the rule references no Claude-specific tools,\n"
+    "models, paths, or hook system — i.e. it would apply identically under\n"
+    "any other coding agent. Otherwise default to CLAUDE.md.\n"
+    f"Append under the `{LESSONS_HEADER}` section. If a `## Lessons Learned`\n"
+    "section already exists in the file, USE THAT existing section instead\n"
+    f"of creating a new `## Lessons` (do not duplicate). If neither exists,\n"
+    f"create `{LESSONS_HEADER}` at the end of the file.\n"
+    "DO NOT create any sub-section. DO NOT use the old verbose template\n"
+    "(### title / **Rule:** / **Why:** / **How to apply:** / **Date:**).\n\n"
     "Bullet format (one line, then bad/good on indented sub-bullets):\n"
     "  - **<short title>** — <one-sentence rule>.\n"
     "    - ❌ Bad: <one-line bad example/output>.\n"
     "    - ✅ Good: <one-line good example/output>.\n\n"
+    "EXAMPLES MUST BE GENERIC. Do NOT use project codenames, ticket IDs,\n"
+    "internal artifact names, partner/agency names, or domain-specific\n"
+    "identifiers. Use pattern-level placeholders any reader on any project\n"
+    "would understand (e.g. `<SomeFeatureFlag>`, `<SomeDialogComponent>`,\n"
+    "`<some-helper>`, `<feature-x>`). If the rule cannot be illustrated\n"
+    "without naming a specific project artifact, the lesson is too\n"
+    "project-specific for the global file — capture it in the project's\n"
+    "own CLAUDE.md instead, or skip.\n\n"
     "If a similar bullet already exists, UPDATE it in-place; do not duplicate.\n"
     "Newest bullets first within the section.\n\n"
     "FALSE POSITIVES — skip silently (no message to user):\n"

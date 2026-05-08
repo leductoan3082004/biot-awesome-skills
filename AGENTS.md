@@ -1,81 +1,14 @@
-# Agent Operating Instructions
+# Agent Operating Instructions (Universal)
 
-Canonical global instructions for any coding agent (Claude Code, Codex, Cursor, etc.) on this machine.
+Instructions for **any** coding agent (Claude Code, Codex, Cursor, etc.) working on this machine.
 
-This file is the **single source of truth**. The following paths are symlinks to it — edit `AGENTS.md` only:
-- `biot-awesome-skills/CLAUDE.md` → `AGENTS.md`
-- `~/.claude/CLAUDE.md` → `biot-awesome-skills/AGENTS.md`
+This file holds **agent-neutral** rules only. Anything tied to a specific agent's tooling, models, file paths, or hook system lives in a matching companion file (`CLAUDE.md`, future `CODEX.md`, etc.) which `@`-imports this one.
 
-Agent hooks live under `hooks/` in this repo and are symlinked into `~/.claude/hooks/`. When any file under `hooks/` or this `AGENTS.md` is modified, commit + push to the biot remote so other machines/sessions stay in sync (see Lessons below).
+Keep this file portable. If you find yourself typing `Opus`, `Sonnet`, `Anthropic`, `~/.claude/...`, `Agent` tool, or any other vendor-specific term — it does not belong here. Move it to the relevant companion file.
 
 ---
 
-## 1. Prefer Agents to Preserve Context
-
-Delegate to sub-agents whenever practical to speed up work and keep the main context window lean. Use the `Agent` tool with the appropriate `subagent_type` (e.g., `Explore`, `general-purpose`, `Plan`, or a specialist reviewer).
-
-### Model selection for delegated agents
-Pick the model based on task difficulty. The two allowed models are **Claude Opus 4.7** (1M context) and **Claude Sonnet 4.6**.
-
-**Hard problems → Opus 4.7 at xhigh reasoning effort (from the start).**
-Use Opus 4.7 + xhigh when the task involves any of:
-- deep research, multi-step analysis, or synthesis across sources,
-- ambiguous requirements or high-stakes decisions,
-- architecture / design / strategy / evaluation / judgment calls,
-- debugging a non-obvious bug or diagnosing unknown behavior,
-- changes with broad blast radius or non-trivial risk,
-- anything the user has explicitly flagged as important.
-
-How to invoke:
-- Pass `model: "opus"` to the `Agent` tool.
-- Include an explicit instruction in the prompt such as: *"Use xhigh reasoning effort / maximum extended thinking for this task."*
-- Do **not** downgrade to a lower reasoning effort to save tokens unless the user has explicitly authorized it.
-
-**Easy tasks → Sonnet 4.6 (faster/cheaper), with Opus review when correctness matters.**
-Use Sonnet 4.6 for clearly scoped, low-risk work:
-- mechanical refactors with obvious shape,
-- formatting, renaming, boilerplate generation,
-- running commands / scripting with a known recipe,
-- small, local bug fixes in well-understood code,
-- summarization or transformation of explicit inputs,
-- routine lookups where the answer is findable and verifiable.
-
-How to invoke:
-- Pass `model: "sonnet"` to the `Agent` tool.
-- Keep the prompt narrow and action-oriented with clear acceptance criteria.
-
-**Review rule for Sonnet output:**
-If the Sonnet agent produced code, factual claims, or decisions that will be acted on, spawn a **second agent on Opus 4.7 at xhigh** to review the work before you trust it. The reviewer follows the Trust & Verification policy below — independent check, not a rubber stamp. Skip the Opus review only when the output is purely mechanical and trivially verifiable at a glance (e.g., a one-line format fix).
-
-**When in doubt about difficulty → default to Opus 4.7 + xhigh.** A small amount of over-spend on easy tasks is cheaper than an unnoticed wrong answer on a hard one.
-
-**Always prohibited:**
-- Using any model other than Opus 4.7 or Sonnet 4.6 for delegated agents.
-
-### Trust & verification policy
-- Do **not** trust any agent response immediately. Treat every answer as a **draft until verified**.
-- For important outputs, spawn a **second independent agent** to validate the first. The validator must:
-  - check factual accuracy,
-  - verify assumptions,
-  - identify missing evidence,
-  - challenge weak reasoning,
-  - confirm whether the conclusion is actually supported,
-  - and must **not** simply summarize or agree with the first agent.
-- If the validator finds conflicts, inconsistencies, or unsupported claims, the result is **not yet trustworthy**.
-
-### Final acceptance rule
-Only accept an agent result after:
-1. the primary agent completes the task,
-2. a second agent validates it independently,
-3. key facts/conclusions are rechecked,
-4. unresolved uncertainty is explicitly called out.
-
-### Operating principle
-Delegate to protect context. Hard problems → Opus 4.7 + xhigh from the start. Easy tasks → Sonnet 4.6, then have Opus 4.7 + xhigh review the result when it matters. Validate before trusting. When confidence matters, use one agent to produce and another to verify.
-
----
-
-## 2. Git Commit Message Policy
+## 1. Git Commit Message Policy
 
 Every commit must follow simplified Conventional Commits:
 
@@ -86,11 +19,11 @@ Every commit must follow simplified Conventional Commits:
 Allowed types (at minimum): `feat`, `fix`, `docs`, `refactor`, `test`, `chore`.
 
 ### Authorship rule (highest priority)
-**Never add Claude as a commit author or co-author.** Specifically:
-- **Do not** append `Co-Authored-By: Claude <...>` (or any `Co-Authored-By` trailer that names Claude, Anthropic, or an AI assistant).
-- **Do not** append generator footers like `🤖 Generated with Claude Code` or `Generated with [Claude Code]`.
+**Never add the AI assistant as a commit author or co-author.** Specifically:
+- **Do not** append any `Co-Authored-By` trailer that names an AI assistant or vendor (e.g. Claude, Anthropic, GPT, OpenAI, Copilot, Cursor, Codex).
+- **Do not** append generator footers (e.g. `🤖 Generated with <tool>`, `Generated with [<tool>]`).
 - **Do not** set the commit author/committer to anything other than the user's own git identity.
-- This applies to every commit, amend, rebase, and squash — no exceptions.
+- Applies to every commit, amend, rebase, and squash — no exceptions.
 
 If a prior template or example suggests adding these lines, ignore it. Commits must look like they were written by the user.
 
@@ -107,7 +40,7 @@ Add a body when useful to explain **why** the change was made, important context
 - Matches `<type>: <short descriptive subject>` exactly.
 - Subject is clear and specific.
 - Body is included when context matters.
-- **No `Co-Authored-By: Claude` or AI generator lines anywhere in the message.**
+- **No AI `Co-Authored-By` trailer or generator footer anywhere in the message.**
 
 ### Hard rule
 **Never** commit with a non-compliant message. If the first draft is vague, off-pattern, or contains AI authorship/generator lines, rewrite it until it complies. Prefer clarity over brevity.
@@ -133,20 +66,20 @@ This change adds an idempotency check before sending the email again.
 ```
 feat: add retry logic for webhook delivery
 
-Co-Authored-By: Claude <noreply@anthropic.com>
+Co-Authored-By: <AI assistant name> <noreply@example.com>
 ```
-Reason: names Claude as a co-author. Remove the trailer.
+Reason: names an AI assistant as co-author. Remove the trailer.
 
 ```
 fix: prevent null crash when profile image is missing
 
-Generated with Claude Code
+🤖 Generated with <AI tool>
 ```
 Reason: AI generator footer. Remove the line.
 
 ---
 
-## 3. Pull Request Creation Policy
+## 2. Pull Request Creation Policy
 
 Every PR must give reviewers enough context to understand **what** changed, **why**, **how risky** it is, **how it was tested**, and **where to focus**. Optimize for reviewer usefulness, not form completion.
 
@@ -224,9 +157,9 @@ I did not verify behavior against the legacy admin entry point because that envi
 
 ---
 
-## 4. Engineering Discipline (High Priority)
+## 3. Engineering Discipline (High Priority)
 
-These principles govern how you approach every task. They are non-negotiable — apply them before, during, and after all work. Sourced from battle-tested agent workflow patterns.
+These principles govern how you approach every task. They are non-negotiable — apply them before, during, and after all work.
 
 ### Anti-rationalization
 
@@ -284,31 +217,22 @@ These apply at all times, across all tasks:
 
 ---
 
-## Lessons
+## Lessons (universal)
 
-Newest bullets first. Compact format only — one-line rule plus `❌ Bad` / `✅ Good` sub-bullets. Auto-captured by `hooks/pattern-observer.py`; agent self-evaluates worthiness silently and writes here without asking.
+Agent-neutral lessons. Newest first. Compact format — one-line rule plus `❌ Bad` / `✅ Good` sub-bullets. If a captured lesson references a specific agent's tooling, paths, or models, it belongs in that agent's companion file (e.g. `CLAUDE.md`), not here.
 
-- **Sync hook + AGENTS.md edits to biot remote** — When any file under `biot-awesome-skills/hooks/` or this `AGENTS.md` is modified, commit and push to the biot remote in the same turn so other machines/sessions stay in sync.
-  - ❌ Bad: Edit `~/.claude/hooks/pattern-observer.py` locally, leave biot dirty/untracked, never push.
-  - ✅ Good: Edit via the symlink, then `cd biot-awesome-skills && git add hooks AGENTS.md && git commit -m "<type>: <subject>" && git push --no-verify`.
-- **Always wire feature flags for dark-launch features** — Never ship a new feature or component without a LaunchDarkly / agency-attribute flag gating it from the start.
-  - ❌ Bad: Render `<SaveSearchDialog>` unconditionally after a Drawer→Dialog migration.
-  - ✅ Good: Add `enableNewSaveSearchDialog` to `AgencyAttributesEnums` and wrap the render: `{hasAttribute(AgencyAttributesEnums.enableNewSaveSearchDialog) && <SaveSearchDialog ... />}`.
-- **Run skill load tests fully agent-to-agent** — Spawn a sub-agent to play the requester role; user is conductor, not participant.
-  - ❌ Bad: "Please answer Q1–Q5 as the PM so I can run the skill."
-  - ✅ Good: Seed a Sonnet sub-agent with the ticket text and let it role-play the requester; main session reports compliance back.
-- **Auto mode: attempt obvious recovery, don't menu-pick** — One well-known fix path → execute it; only escalate if it fails.
-  - ❌ Bad: After `git push` 403, present three auth-switch options to the user.
-  - ✅ Good: `gh auth switch` → retry push → report result. Reserve confirmation for destructive or ambiguous failures.
-- **Distinguish named tool sources before bulk-deleting** — Identify which items belong to the named source; don't sweep everything unrecognized.
-  - ❌ Bad: "Remove gstack skills" → delete every skill except the four I personally recognize.
-  - ✅ Good: Cross-reference the gstack manifest, list candidates, remove only those.
-- **Investigate function purpose at contract level, not caller census** — Lead with the abstract contract; current callers are examples, not the exhaustive set.
-  - ❌ Bad: "`shouldShowFormCard` is needed for these N Standards cards, so it's only for Standards."
-  - ✅ Good: "`shouldShowFormCard` gates render based on schema metadata; Standards/Records/custom-agency forms all hit this path."
-- **Don't auto-commit planning/reference docs on feature branches** — `.planning/` and similar agent-reference files stay local unless the user explicitly tracks them.
-  - ❌ Bad: Workflow's `commit_docs: true` adds `docs: map existing codebase` commit to a feature branch.
-  - ✅ Good: Set `commit_docs: false`, add `.planning/` to `.gitignore`, confirm before committing any planning artifact.
-- **Persist cross-repo lessons globally, not in project-scoped memory** — Default scope = `~/.claude/CLAUDE.md` (now symlinked to `biot/AGENTS.md`); project memory only for genuinely repo-specific quirks.
-  - ❌ Bad: Save "always use named exports" to `~/.claude/projects/<dir>/memory/` — invisible in other repos.
-  - ✅ Good: Append to `biot/AGENTS.md` Lessons; project memory only for "this repo uses pnpm workspaces with X quirk".
+- **Use generic examples in lesson bullets** — Bad/good illustrations stay pattern-level; never name project codenames, ticket IDs, partner/agency names, or internal artifacts. If the rule needs a domain artifact to make sense, it is too project-specific for this file — move it to that project's `CLAUDE.md`.
+  - ❌ Bad: `Render <SaveSearchDialog> unconditionally; flag enum is AgencyAttributesEnums.enableNewSaveSearchDialog.`
+  - ✅ Good: `Render <SomeFeatureDialog> unconditionally; gate behind <some-feature-flag> from the start.`
+- **Always wire feature flags for dark-launch features** — Never ship a new user-visible feature without a flag (LaunchDarkly / config attribute / equivalent) gating it from the start.
+  - ❌ Bad: Land `<SomeNewDialog>` unconditionally after a UI migration; cleanup deferred.
+  - ✅ Good: Introduce `<some-feature-flag>` and wrap the render: `{hasFlag('<some-feature-flag>') && <SomeNewDialog ... />}`.
+- **Distinguish named tool sources before bulk-deleting** — When asked to remove items belonging to a specific source, enumerate only that source's items; do not sweep everything unrecognized.
+  - ❌ Bad: "Remove `<source-x>` plugins" → delete every plugin except the few personally recognized.
+  - ✅ Good: Cross-reference `<source-x>`'s manifest, list candidates, remove only those.
+- **Investigate function purpose at contract level, not caller census** — Lead with the abstract contract / invariant; current callers are examples, not the exhaustive set.
+  - ❌ Bad: "`<helperFn>` is only used by `<KnownCallerA>` and `<KnownCallerB>`, so it exists only for that case."
+  - ✅ Good: "`<helperFn>` enforces `<invariant>` over its input; current callers are examples — other call sites with the same shape may rely on it too."
+- **Don't auto-commit planning / scratch docs on feature branches** — Agent-reference artifacts stay local unless the user explicitly tracks them, even if a workflow's default config says to commit.
+  - ❌ Bad: Workflow's `commit_docs: true` lands a `docs: <generic title>` commit on a feature branch.
+  - ✅ Good: Set `commit_docs: false`, add scratch dir to `.gitignore`, confirm before committing any planning artifact.
