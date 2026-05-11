@@ -221,6 +221,12 @@ These apply at all times, across all tasks:
 
 Agent-neutral lessons. Newest first. Compact format — one-line rule plus `❌ Bad` / `✅ Good` sub-bullets. If a captured lesson references a specific agent's tooling, paths, or models, it belongs in that agent's companion file (e.g. `CLAUDE.md`), not here.
 
+- **Explain semantic fault before code proof** — When reviewing a design or mapping bug, state the domain-level mistake in user terms before citing implementation details.
+  - ❌ Bad: "Line `<n>` compares `<child-path>` to `<parent-path>`, so the matcher returns false."
+  - ✅ Good: "`<ChildField>` should stay inside `<ParentSection>`; the current model treats it as a separate selectable section."
+- **Separate proposed changes from baseline truth** — When evidence comes from a dirty branch or unmerged work, describe it as proposed/current-branch behavior, not established product or mainline behavior.
+  - ❌ Bad: "`<field-a>` surely maps to `<field-b>` because the current branch adds that mapping."
+  - ✅ Good: "Current branch proposes `<field-a>` -> `<field-b>`; verify mainline or product approval before treating it as certain."
 - **Use generic examples in lesson bullets** — Bad/good illustrations stay pattern-level; never name project codenames, ticket IDs, partner/agency names, or internal artifacts. If the rule needs a domain artifact to make sense, it is too project-specific for this file — move it to that project's `CLAUDE.md`.
   - ❌ Bad: `Render <SaveSearchDialog> unconditionally; flag enum is AgencyAttributesEnums.enableNewSaveSearchDialog.`
   - ✅ Good: `Render <SomeFeatureDialog> unconditionally; gate behind <some-feature-flag> from the start.`
