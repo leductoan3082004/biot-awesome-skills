@@ -9,6 +9,8 @@ Persist enough of the current session state that a future session — same perso
 
 **Core principle:** A save is a contract with future-you. If a required field is empty, the contract is broken — the resume will fail in subtle ways that look like progress.
 
+**HARD GATE — Capture-only.** This skill writes ONE file under `~/.claude/contexts/` and reads git state. It does NOT modify project code, does NOT run `git add` / `git commit` / `git push` / `git stash`, does NOT mutate the working tree. If the user wants to commit alongside saving, that is a separate operation they must request explicitly — never bundle it.
+
 **Iron rule:** Never write inside the working repo. Saves go to `~/.claude/contexts/<repo-slug>/`. This isolates session memory from project history, survives branch switches, survives clones, and avoids polluting the user's PRs with planning artifacts.
 
 ## Storage Location
@@ -20,11 +22,47 @@ Persist enough of the current session state that a future session — same perso
 - `<repo-slug>` = absolute path of the repo with `/` → `-`, leading `-` stripped.
   Example: `/Users/toale/Developer/iris` → `Users-toale-Developer-iris`
 - `<timestamp>` = `YYYY-MM-DD-HHMM` in local time
-- `<short-topic>` = 2-5 word kebab-case slug of the current task
+- `<short-topic>` = 2-5 word kebab-case slug, sanitised per the **Title Sanitisation** section below
 
 Compute repo slug from `git rev-parse --show-toplevel`. If the user is not in a git repo, use the cwd absolute path with the same transformation, and note this in the save's frontmatter.
 
 `mkdir -p` the directory. The directory lives in `~/.claude/`, never in the repo. This is non-negotiable — see Red Flags.
+
+## Title Sanitisation (security boundary)
+
+User-supplied titles are **untrusted input**. They may contain shell metacharacters (`"`, `;`, `$`, `` ` ``, spaces, newlines, glob chars) that could corrupt subsequent commands if interpolated unsafely. The filename slug MUST be computed in bash with an allowlist — never in the LLM layer by string concatenation.
+
+Even if you (the LLM) "auto-derive" a slug from conversation context, still run the allowlist sanitiser before constructing the path.
+
+```bash
+# Pass the raw title via env var; never interpolate it into a command string.
+RAW="${USER_TITLE:-untitled}"
+TITLE_SLUG=$(printf '%s' "$RAW" \
+  | tr '[:upper:]' '[:lower:]' \
+  | tr -s ' \t\n' '-' \
+  | tr -cd 'a-z0-9.-' \
+  | cut -c1-60)
+TITLE_SLUG="${TITLE_SLUG:-untitled}"
+```
+
+Rules:
+- Lowercase only
+- Whitespace (incl. newlines) collapsed to single hyphens
+- Strip everything outside the allowlist `a-z 0-9 - .`
+- Cap at 60 characters
+- Empty / fully-stripped → `untitled`
+
+### Collision-safe filenames
+
+If `<timestamp>-<slug>.md` already exists (same-second double save with same title), append a 4-character random suffix: `<timestamp>-<slug>-<suffix>.md`. NEVER overwrite. Saved files are append-only.
+
+```bash
+FILE="${DIR}/${TIMESTAMP}-${TITLE_SLUG}.md"
+if [ -e "$FILE" ]; then
+  SUFFIX=$(LC_ALL=C tr -dc 'a-z0-9' </dev/urandom | head -c 4)
+  FILE="${DIR}/${TIMESTAMP}-${TITLE_SLUG}-${SUFFIX}.md"
+fi
+```
 
 ## Required Fields (no shortcuts)
 
@@ -35,9 +73,12 @@ A save is incomplete if ANY of these is missing or empty. "Couldn't find" is acc
 - `repo` — absolute path
 - `branch` — current branch (or `null` outside git)
 - `topic` — one short phrase
+- `status` — `in-progress` (default) or `completed`. Use `completed` only when archiving a finished task for reference; the default is `in-progress`. Restore prioritises `in-progress` saves.
 - `tags` — list, may be empty `[]`
 - `jira` — ticket ID or `null`
 - `pr` — PR URL or `null`
+- `files_modified` — list of repo-relative paths from `git status --short` (both staged and unstaged). Machine-readable mirror of the body's uncommitted list. Empty `[]` if working tree clean.
+- `session_duration_s` — integer seconds since session start, or `null` if unknown. Never write a guessed number.
 - `related_saves` — list of prior save filenames in same `<repo-slug>/` dir on the same topic/branch, may be empty `[]`
 
 ### Body sections (human-readable)
@@ -86,9 +127,14 @@ saved_at: 2026-05-05T14:32-07:00
 repo: /Users/toale/Developer/iris
 branch: toale_axoncorp/RMS-109955-searchable-placeholder-visibility
 topic: searchable placeholder card visibility
+status: in-progress
 tags: [iris, form-card, RMS-109955]
 jira: RMS-109955
 pr: null
+files_modified:
+  - packages/iris/src/pages/form/components/searchablePlaceholderCard.tsx
+  - packages/iris/src/pages/form/components/searchablePlaceholderCard.spec.tsx
+session_duration_s: 4320
 related_saves: [2026-05-04-1820-form-card-visibility.md]
 ---
 
@@ -132,6 +178,25 @@ related_saves: [2026-05-04-1820-form-card-visibility.md]
 - Dev environment state: <servers running, agents in flight, etc.>
 ```
 
+## List Mode (ergonomic helper)
+
+`/context-save list` — show saves for the **current branch** in `~/.claude/contexts/<repo-slug>/`.
+`/context-save list --all` — show saves across all branches.
+
+Read each `*.md` frontmatter to extract `branch`, `status`, `topic`, `saved_at`. Parse the title slug from the filename. Present as a table:
+
+```
+SAVED CONTEXTS (<branch>)
+#  Date              Title                    Status
+─  ────────────────  ───────────────────────  ───────────
+1  2026-05-05 14:32  searchable-placeholder   in-progress
+2  2026-05-04 18:20  form-card-visibility     in-progress
+```
+
+With `--all`, include a Branch column. Sort newest first by filename prefix (`YYYY-MM-DD-HHMM`), not by mtime — filenames are stable across copies/rsync, mtime drifts.
+
+List mode is read-only. It does not modify any file, does not delete saves.
+
 ## Linking Related Saves
 
 Before writing, list existing saves in `~/.claude/contexts/<repo-slug>/`. If any prior save matches the current topic, branch, or Jira ticket, include its filename in `related_saves`. This lets `context-restore` reconstruct a timeline rather than treating each save as orphan.
@@ -158,6 +223,8 @@ Do **not** write the file until ALL of these are true:
 - [ ] Resume hints written for someone who walks in cold
 - [ ] Prior saves in same `<repo-slug>/` dir checked for `related_saves` links
 - [ ] Path is under `~/.claude/contexts/`, NOT inside the working repo
+- [ ] Title slug ran through the bash allowlist sanitiser (`tr -cd 'a-z0-9.-'`, length ≤60). NOT built by LLM string concatenation.
+- [ ] No `git add` / `git commit` / `git push` / `git stash` / file edit was performed during the save — the skill is capture-only.
 
 After writing, **read the file back** and verify the frontmatter parses and required sections are populated. A save you didn't verify is a save you didn't actually save.
 
@@ -193,10 +260,13 @@ After saving:
 | Red flag | What to do |
 |----------|-----------|
 | About to write inside the working repo | Stop. Path must be under `~/.claude/contexts/`. Re-derive. |
+| About to run `git add`/`commit`/`push`/`stash` as "part of saving" | Stop. The skill is capture-only. If the user wants a commit, that's a separate explicit request. |
+| Building the filename via string concatenation in the LLM layer | Stop. User titles are untrusted. Run the bash allowlist sanitiser. |
+| About to interpolate a user-supplied title directly into a shell command (`cat "$file"`, `grep "$title"`) | Stop. Pass via env var; the sanitised slug is the only value safe in path positions. |
 | Frontmatter has placeholder values like `<TODO>` or `???` | Stop. Either fill in or mark explicitly null. No placeholders ship. |
 | Decisions / Investigation sections empty without "(none)" note | Stop. Either populate or document the empty explicitly. |
 | Skipped `git status` / `git log` because "I remember" | Stop. Run the commands. Memory of git state is unreliable. |
-| Filename collision with existing save | Don't overwrite. Append `-2`, `-3` to topic, OR check if it's a duplicate-save attempt and ask the user. |
+| Filename collision with existing save | Don't overwrite. Append a 4-char random suffix per the Title Sanitisation section. Saves are append-only. |
 | Path under `~/.claude/contexts/` doesn't yet exist | `mkdir -p` first. Don't fail silently. |
 | User in a non-git directory | Use cwd absolute path as repo-slug, document this in frontmatter. Do not abort. |
 | `related_saves` is empty but a prior save on same branch / Jira clearly exists | Stop. List the contexts dir, find the link, populate. |
@@ -214,7 +284,7 @@ After saving:
 - **Multiple worktrees of the same repo**: repo-slug uses the worktree's absolute path, so `/Users/toale/Developer/iris` and `/Users/toale/Developer/iris-worktree-1` get separate slugs. Mention this if relevant.
 - **No git repo**: Use cwd absolute path as the slug. Note `branch: null` and `repo` set to cwd in frontmatter.
 - **Sensitive content in conversation**: do not include credentials, tokens, or other secrets in the save. Note their existence ("API key handled in step 3") without the value.
-- **Filename collision**: do not overwrite. Append `-2`, `-3` to topic slug, or check if duplicate save attempt and ask user.
+- **Filename collision**: do not overwrite. Append a 4-character random suffix per the Title Sanitisation section. If a save was made seconds ago with the same title and the user clearly meant to update it, ask before creating a second file.
 
 ## Related Skills
 

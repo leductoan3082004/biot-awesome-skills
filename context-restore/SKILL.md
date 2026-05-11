@@ -9,6 +9,8 @@ Find one or more saved contexts for the current repo, validate them against the 
 
 **Core principle:** A save is a snapshot — the world has moved since. The skill's job is not to read a file and dump it; it is to reconstruct a working state by reconciling the saved context with what the repo looks like *now*, and to surface every divergence to the user before they act on stale assumptions.
 
+**HARD GATE — READ-ONLY.** This skill reads files and runs read-only git commands. It does NOT run `git checkout`, `git fetch`, `git stash apply`/`pop`, `git reset`, does NOT write any file, does NOT modify the repo or the saved contexts. Any mutation requires explicit user confirmation, surfaced as a question, never as a fait accompli. If you catch yourself about to write or checkout, STOP.
+
 **Iron rule:** Never silently checkout a branch, never silently apply diffs, never silently overwrite a working state. Branch switches and tree mutations are destructive and require explicit user confirmation.
 
 ## Storage Location
@@ -30,10 +32,11 @@ Match what the user asked for. Combine signals — do not pick one and ignore th
 | Topic / feature name | grep across `topic:`, `tags:`, title, body |
 | Jira ticket (RMS-####) | grep `jira:` field and body |
 | Branch name | grep `branch:` field |
-| "last", "most recent" | sort by `saved_at` desc, candidates = top N where saved_at within last 7 days |
+| Filename number (`restore 2`) | Match against the numbered list from a recent `/context-save list` or freshly-computed enumeration |
+| "last", "most recent" | First file by filename-prefix descending sort (`YYYY-MM-DD-HHMM`). If unqualified, surface top 1; if user said "last 3", surface top 3. |
 | "yesterday", date hint | filter by `saved_at` |
 | PR number / URL | grep `pr:` field and body |
-| Nothing specific | List newest 5-10 with topic + saved_at, ask user to pick |
+| Nothing specific | List newest 5-10 with topic + status + saved_at, ask user to pick |
 
 ```bash
 REPO_ROOT=$(git rev-parse --show-toplevel 2>/dev/null || pwd)
@@ -41,12 +44,18 @@ SLUG=$(echo "$REPO_ROOT" | sed 's|^/||; s|/|-|g')
 BRANCH=$(git branch --show-current 2>/dev/null)
 DIR="$HOME/.claude/contexts/$SLUG"
 
-ls -1t "$DIR/" 2>/dev/null
+# Order saves by filename prefix (YYYY-MM-DD-HHMM), NOT by mtime.
+# Filenames are stable across copies, rsync, worktree moves; mtime drifts.
+# Cap at 20 most recent — a user with 500 saves shouldn't blow the context
+# window just to enumerate. /context-save list handles pagination.
+find "$DIR" -maxdepth 1 -name '*.md' -type f 2>/dev/null | sort -r | head -20
 grep -l "branch: .*$BRANCH" "$DIR"/*.md 2>/dev/null
 grep -ril "<keyword>" "$DIR/" 2>/dev/null
 ```
 
 **Always also check the current branch.** Run `git branch --show-current`, then grep saves for that branch. If matches exist, surface them even if the user did not ask — they are almost always relevant.
+
+**Prefer `in-progress` over `completed` saves.** Read each candidate's `status:` frontmatter. Restore prioritises `in-progress`; treat `completed` as archive-only unless the user named one explicitly.
 
 ### Hard rule: read every candidate fully
 
@@ -68,18 +77,27 @@ Read every file in the chain. Stop only when every referenced filename has been 
 
 Phase 3 (Verification) is **blocked** until the chain is closed — every `related_saves` reference resolved to a read file or documented as missing (file referenced but not present in `~/.claude/contexts/<repo-slug>/`). If a referenced save is missing, surface that to the user — it may have been deleted, moved, or renamed.
 
+### Chain depth cap
+
+If the chain expands to more than **7 unique files**, do not read all of them silently. Tell the user: "this chain has N entries — read the full chain, the most recent 3, or just this save?" Let the user pick. Reading 50 saves blindly will blow the context window and bury the most important content. Cap-and-ask is better than dump-and-hope.
+
+Always read **at minimum** the candidate save itself plus its direct `related_saves` parents. Truncation, if any, applies to deeper ancestors.
+
 ## Phase 3: Verify Against Live Tree
 
 A saved context is a snapshot. Before recommending action on it, verify the world has not moved out from under it.
 
-Run these:
+Run these (all read-only):
 
 ```bash
 git rev-parse --show-toplevel        # confirm correct repo
 git branch --show-current             # current branch
 git status --short                    # uncommitted state
 git log -10 --oneline                 # recent commits
+git stash list                        # named stashes, if any
 ```
+
+None of these mutate state. If you find yourself reaching for `git checkout`, `git fetch`, `git stash apply`, `git stash pop`, `git reset`, or any write command, STOP — that requires explicit user confirmation per the HARD GATE.
 
 For the **latest save in the chain**, compare:
 
@@ -92,6 +110,15 @@ For the **latest save in the chain**, compare:
 For every `path:line` reference in the save's Investigation section, verify the file still exists at that path. For each missing file, mark in the briefing: `⚠ <path> referenced in save no longer exists — possibly renamed, deleted, or moved`.
 
 For every `path:line` that exists, sanity-check that the file is at least `line` long. Code rots between saves; deep verification of every line is excessive, but a file-existence + size check is required.
+
+### Stash verification
+
+If the save's body mentions a `git stash` (resume hints, notes, or pending state), run `git stash list` and verify the stash is still present. Match by message substring when possible.
+
+- Stash present → mention it in the briefing so the user knows to `git stash apply --index <ref>` deliberately.
+- Stash missing → ⚠ warn explicitly: `Save references stash "<msg>" but it is not in stash list — may have been popped or dropped`. Suggest `git fsck --lost-found` if the user wants to attempt recovery.
+
+**Never automatically `git stash apply`, `git stash pop`, or `git stash drop`.** Stash operations are destructive and require explicit user confirmation per the HARD GATE.
 
 ### Hard rule: never silently checkout
 
@@ -131,11 +158,11 @@ Do not emit a briefing until all are true:
 - [ ] Phase 1 candidate set built from at least 2 signals (current branch always one of them, when the user is in a git repo)
 - [ ] Phase 2 related_saves chain closed for every candidate
 - [ ] Every candidate file read fully (not just frontmatter, not just summary)
-- [ ] Phase 3 verification run: branch, recent commits, uncommitted state, file existence for every `path:line` reference
+- [ ] Phase 3 verification run: branch, recent commits, uncommitted state, stash list, file existence for every `path:line` reference
 - [ ] Phase 4 merge produced (if chain has >1 save)
 - [ ] Conflicts between saves explicitly identified or absence of conflicts confirmed
-- [ ] No branch checkout has been performed without user confirmation
-- [ ] No file has been modified
+- [ ] No branch checkout, fetch, stash apply/pop, or reset has been performed without user confirmation
+- [ ] No file has been modified, no save file has been touched
 
 Skipping any precondition produces a briefing that points at stale state, and the user acts on stale assumptions. That is worse than no restore.
 
@@ -209,7 +236,10 @@ If the match is in a different repo, tell the user which repo it belongs to, and
 | "Latest save said decision X — use it" | If an earlier save said NOT X and was reversed, surface the reversal. The user may want to revisit. |
 | "Skip checking sibling repo-slugs if dir is empty" | User may be in wrong worktree. Listing siblings takes 1 second. Do it. |
 | "I'll silently load the file the user named, skip chain walk" | User named one file; the chain may extend to others they don't remember. Walk it. |
-| "Chain has 5 saves, just read the newest 2" | Chain length is not a reason to truncate. Read all. The skipped saves contain the assumptions you'll silently violate. |
+| "Chain has 5 saves, just read the newest 2" | Chain length under the 7-file cap is not a reason to truncate. Read all. The skipped saves contain the assumptions you'll silently violate. Cap-and-ask applies only above 7. |
+| "Save references a stash — let me apply it for them" | No. Stash apply/pop is destructive. Verify the stash exists, mention it in the briefing, let the user run apply themselves. |
+| "`ls -1t` is fine, mtime is close enough" | No. Filenames carry the canonical timestamp (`YYYY-MM-DD-HHMM`). mtime drifts on rsync/copy/worktree-move and lies about save order. Sort by filename. |
+| "Completed-status save matched first — load it" | Completed saves are archive. Skip past them to the newest `in-progress`, unless the user named the completed save explicitly. |
 
 ## Red Flags — STOP and Restart
 
@@ -225,6 +255,9 @@ If the match is in a different repo, tell the user which repo it belongs to, and
 | Skipped reading older saves in chain because "newest is enough" | Stop. Read them all. The chain exists for a reason. |
 | Modified any file or git state during restore | Stop. Restore is read-only by default. Reverse the change, ask user. |
 | Save older than 30 days, briefing presented as authoritative | Add staleness warning. Suggest re-verifying key facts. |
+| About to `git stash apply` / `pop` / `drop` to "restore the working state" | Stop. Read-only. Mention the stash in the briefing; let the user run apply. |
+| Chain depth >7 about to be silently consumed | Stop. Ask the user: full chain, top-3, or single save? |
+| Used `ls -1t` for ordering | Stop. Use `find ... | sort -r` on filename prefix. mtime is not canonical. |
 
 ## When NOT to Use This Skill
 
