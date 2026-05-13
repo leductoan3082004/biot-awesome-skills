@@ -201,7 +201,75 @@ Before presenting root cause, pass this gate:
 
 If any box is unchecked: **you're not done. Keep investigating.**
 
+## Response Format When Quoting Code
+
+Investigations frequently quote source code in the response — to show the suspect line, walk through a function, trace control flow, or demonstrate a transformation. When the response includes a fenced code block of on-disk source, the block must follow the **inline-narrated** shape:
+
+1. **Name the branches / control flow** in one sentence above the block. Don't restate them line-by-line below.
+2. **Anchor in backticks** directly above the block as a bare absolute path with `:line` suffix so it's cmd-clickable in iTerm2 → VSCode/Cursor: `` `/abs/path/file.ext:N` ``. Single-line suffix only (`:172`, not `:172-176`). No markdown link wrapping (`[label](file://...)` — terminals ignore it).
+3. **Prune the snippet** to only the lines that carry the explanation. Replace skipped regions with the language's comment syntax (e.g. `// ...` for Go/TS/JS).
+4. **Inline-comment every non-trivial line** explaining WHAT it does and WHY (when not obvious). Use the host language's comment syntax: `//` for Go/TS/JS/Rust/Java, `#` for Python/Shell/Ruby, `--` for SQL/Lua, `;` for Lisp/Clojure. Skip comments on obvious lines (`return x`, `if err != nil { ... }`) — let them speak for themselves.
+5. **No post-block enumerated narration** (`1. … 2. … 3. …`) that re-describes lines already commented in the snippet. Post-block prose is reserved strictly for content NOT in the snippet — gotchas, dead paths, dormant callers, bridges to the next callee being inlined, cross-cutting insights, or a small `Input → Output` example for non-trivial transforms.
+
+### ❌ Bad — verbatim block + separate numbered list
+
+```ts
+export async function foo({ id }, ctx) {
+  if (!id) throw new Error('bad input')
+  const result = await ctx.svc.fetch(id)
+  if (!result) throw new Error('not found')
+  return result
+}
+```
+
+Three parts:
+1. Validates input, throws on missing id.
+2. Calls the service to fetch data.
+3. Throws on empty result, otherwise returns it.
+
+Reader is forced to map `1. → line 2`, `2. → line 3`, `3. → lines 4-5`. Friction per block, multiplied across the dozens of blocks in a real investigation writeup.
+
+### ✅ Good — inline-narrated, pruned, clickable anchor
+
+Three branches: bad-input rejection, not-found rejection, happy path.
+
+`` `/Users/toale/Developer/<repo>/<path>/foo.ts:42` ``:
+
+```ts
+export async function foo({ id }, ctx) {
+  // Guard: reject empty/missing id before issuing any RPC
+  if (!id) throw new Error('bad input')
+  // Fetch from the downstream service
+  const result = await ctx.svc.fetch(id)
+  // Empty response = not found; throw so callers don't get a silent null
+  if (!result) throw new Error('not found')
+  return result   // happy path
+}
+```
+
+Each line's explanation sits on the line itself. Zero prose-to-line mapping required.
+
+### When NOT to use the inline-narrated shape
+
+Skip inline narration when the block IS the answer and per-line meaning doesn't apply:
+
+- copy-paste config snippets meant to be pasted verbatim,
+- API request/response shape examples,
+- minimal repros where lines have no individual meaning,
+- one-line commands,
+- generated artifacts (codegen, proto output) where added comments would mislead.
+
+For these, keep the block clean and put any explanation in prose above it.
+
+### Red Flags — STOP and rewrite the block
+
+- A code block is followed by `1. … 2. … 3. …` describing what the block does line-by-line.
+- A code block has zero `//` (or `#`) comments and a paragraph below restates the code in English.
+- A code block is a verbatim file paste — every line included regardless of relevance to the investigation.
+- The anchor above is a relative path, a range (`:172-176`), or wrapped in markdown link syntax.
+
 ## Related Skills
 
 - **superpowers:systematic-debugging** — 4-phase debugging framework. Deep-investigate extends it with stricter evidence requirements and anti-pattern-matching enforcement.
 - **context-save** — Checkpoint investigation state during long sessions. Use when switching tasks or ending session mid-investigation.
+- **clickable-file-anchors** — Formal spec for the cmd-clickable anchor format used by the `Response Format When Quoting Code` section above. Loaded automatically when this skill applies.
