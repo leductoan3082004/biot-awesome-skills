@@ -33,7 +33,7 @@ REQUIRED structure (all five rules):
 1. **Summary sentence above the anchor** — one sentence naming branches/flow (for branching functions) OR the function's purpose (for non-branching functions like mappers/transforms). NEVER skip this — the anchor must not be the first thing on the line. Examples: "Three branches: bad-input, not-found, happy path." OR "Maps gRPC `X.AsObject` to GraphQL `XType` shape — every field is a rename, call, or conversion."
 2. **Cmd-clickable anchor** above the block in backticks: `` `/abs/path/file.ext:N` ``. Absolute path, single-line `:N` (NOT `:N-M`), no `[label](file://...)` wrapper.
 3. **Fenced `` ```<lang> `` block, ~5–15 lines.** Prune to relevant lines; replace skipped regions with `// ...` (or `#`, `--`, `;` per language).
-4. **`//` comment on EVERY non-trivial line.** This is the core mechanic — a code block without comments is forbidden, equivalent to a verbatim dump. Count: `(non-trivial code lines) == (// comments)`. **Non-trivial includes:** any field mapping inside a return object (`id: personnel.personnelId` is a rename — comment it), any function call (`convertAccess(x)` — comment what the call does or why), any type conversion (`getISOString(x)` — comment the conversion), any guard / branch / loop. **Skip only truly trivial:** bare `return x`, plain `if err != nil { return err }`, plain `}`, plain language keywords with no semantic action. When in doubt, comment it.
+4. **`//` comment on EVERY non-trivial line.** This is the core mechanic — a code block without comments is forbidden, equivalent to a verbatim dump. Count: `(non-trivial code lines) == (// comments)`. **Non-trivial includes:** any field mapping inside a return object (`id: personnel.personnelId` is a rename — comment it), any function call (`convertAccess(x)` — comment what the call does or why), any type conversion (`getISOString(x)` — comment the conversion), any guard / branch / loop. **Skip only truly trivial:** bare `return x`, plain `if err != nil { return err }`, plain `}`, plain language keywords with no semantic action. When in doubt, comment it. **Object-literal special rule: EVERY field inside a `return { ... }` literal earns a comment — no exceptions for "obvious" pass-throughs, "obvious" timestamps, or "obvious" renames.** Use `// pass-through` for identity copies, `// rename <a> → <b>` for renamed fields, `// <type-conversion>` for transforms. Skipping even one field violates A4.
 5. **No numbered post-block re-narration.** Post-block prose is for NEW info only (gotchas, dormant paths, cross-cutting insights). NO `1. … 2. … 3. …` under any heading — including disguises like "Where to look next", "To fix: 1./2./3.", "Two places to check", "N steps", "Three states".
 
 ✅ Example (note one `//` comment per non-trivial line, including return-object field mappings):
@@ -81,7 +81,7 @@ REQUIRED structure (all four rules):
 
 1. **Fenced ASCII block** using `├──` `└──` `│` for hierarchy, `→` `↓` for sequence. NOT markdown bullets, NOT bold paragraphs, NOT a two-column `│`+`─` table layout (that's a table, not a tree).
 2. **`#` comment after EVERY non-leaf node**, explaining what it does or which branch it represents. `#` regardless of host language. **Substitutes are FORBIDDEN:** `[brackets]` for file refs are wrong — use `# <file>:<N>`. Parenthetical descriptions `(creates both stubs)` are wrong — use `# creates both stubs`. The `→` arrow shows flow, not explanation — `node → next` still needs `# what node does`.
-3. **Decision branches** labeled `├── yes → <action>` / `└── no → <action>`. Predicate (`X == nil ?`) goes on the parent node; children carry the resolved values. Raw condition expressions as branch labels (`├── X == nil`) are wrong — even for sequential `if`-chains in source code, the tree representation MUST nest. Example: source code `if A == nil { ... } if B == nil { ... } /* else fallthrough */` becomes:
+3. **Decision branches** labeled `├── yes → <action>` / `└── no → <action>`. Predicate (`X == nil ?`) goes on the parent node; children carry the resolved values. Raw condition expressions as branch labels (`├── X == nil`) are wrong — even for sequential `if`-chains in source code, the tree representation MUST nest. **This applies to N-way decisions too: flattening multiple mutually-exclusive conditions into a single-level list is FORBIDDEN.** Example: source code `if A == nil { ... } if B == nil { ... } /* else fallthrough */` becomes:
 
 ```
 A == nil ?
@@ -92,7 +92,15 @@ A == nil ?
         └── no  → <fallthrough action>
 ```
 
-NOT a flat list of conditions.
+NOT this flat form (forbidden, even though the three branches are mutually exclusive):
+
+```
+├── A == nil                  # WRONG — flat condition label
+├── A != nil && B == nil      # WRONG — flat compound label
+└── both != nil               # WRONG — should be the `└── no → no` leaf of nested tree
+```
+
+If your decision tree has 3+ branches, build the nested form — do NOT flatten.
 4. **One line per node.** Function name (or condition) + one-phrase intent. Multi-step actions chain with `→` on the same line OR nest as further children. NEVER as a column of `→ stepN` lines under the same branch.
 
 ✅ Example fan-out:
