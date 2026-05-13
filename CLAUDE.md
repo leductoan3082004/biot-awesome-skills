@@ -142,6 +142,49 @@ Default to surfacing uncertainty, not hiding it.
 
 ---
 
+## gstack
+
+gstack is installed at `~/.claude/skills/gstack`. Use its `/browse` skill for **all** web browsing. **Never** use `mcp__claude-in-chrome__*` tools — `/browse` replaces them.
+
+Available gstack skills:
+
+- `/office-hours`
+- `/plan-ceo-review`
+- `/plan-eng-review`
+- `/plan-design-review`
+- `/design-consultation`
+- `/design-shotgun`
+- `/design-html`
+- `/review`
+- `/ship`
+- `/land-and-deploy`
+- `/canary`
+- `/benchmark`
+- `/browse`
+- `/connect-chrome`
+- `/qa`
+- `/qa-only`
+- `/design-review`
+- `/setup-browser-cookies`
+- `/setup-deploy`
+- `/setup-gbrain`
+- `/retro`
+- `/investigate`
+- `/document-release`
+- `/codex`
+- `/cso`
+- `/autoplan`
+- `/plan-devex-review`
+- `/devex-review`
+- `/careful`
+- `/freeze`
+- `/guard`
+- `/unfreeze`
+- `/gstack-upgrade`
+- `/learn`
+
+---
+
 ## Lessons (Claude-specific)
 
 Newest bullets first. Compact format — one-line rule plus `❌ Bad` / `✅ Good` sub-bullets. Captured automatically by `hooks/pattern-observer.py`. Examples must be generic (no project codenames, ticket IDs, internal artifacts). If a lesson is genuinely agent-neutral (no `~/.claude/*` paths, no Claude-specific models or tools, no `Agent`-tool semantics), promote it to `AGENTS.md` Lessons instead.
