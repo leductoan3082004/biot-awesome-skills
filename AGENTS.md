@@ -219,6 +219,9 @@ These apply at all times, across all tasks:
 
 ## Lessons (universal)
 
+- **Code-walk anchors: absolute path + `:line` for cmd-click** — When introducing a quoted source code block in a response, the inline anchor must be a bare absolute path with a single-line suffix (`:N`) inside backticks, placed directly above the fenced block, so terminal-to-IDE handoffs (cmd-click in iTerm2/Warp/Terminal → VSCode/Cursor/Neovim) jump to the right place. No range syntax (`:N-M` does not parse), no markdown link wrapping (`[label](file://...)` is ignored by terminals). Range info is preserved visually by the quoted lines themselves.
+  - ❌ Bad: `` `<repo>/<subpath>/<file>:172-176` `` (relative path, range syntax) followed by fenced block — not clickable.
+  - ✅ Good: `` `/<absolute>/<repo>/<subpath>/<file>:172` `` directly before fenced block; range shown by the quoted code.
 - **Show concrete I/O examples for complex transforms, not just logic prose** — When walking through a function that transforms / walks / fans out / composes / serializes data, attach a minimal realistic `Input → Output` example after the prose summary. Logic prose alone is slow to reason about; shapes are fast. Trigger when input shape ≠ output shape, recursion / tree walk, ≥2 branches with structurally different returns, joining multiple sources, or any non-obvious filtering/grouping. Use realistic fixtures (tests, sample payloads); never fabricate — write `UNKNOWN: <shape>` instead.
   - ❌ Bad: "`<some-walker>` recurses through the schema, accumulating fields that pass `<predicate>` and skipping the rest." (No shapes shown.)
   - ✅ Good: After the prose, attach `Input: <minimal schema fragment>` and `Output: <resulting columns/rows array>` in a fenced block so the reader sees the transform.
