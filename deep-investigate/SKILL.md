@@ -23,6 +23,8 @@ Relentless, evidence-driven investigation for hard problems. Work until root cau
 | Markdown table with `│` + `─` separators for branching/decision logic | A table is NOT a tree — `│` between two cells ≠ tree hierarchy | Shape B — ASCII tree with `├── └──` rooted at predicate |
 | 5 separate code blocks quoting each callee in a fan-out | Reader must mentally compose the tree | Shape B — one ASCII tree showing all callees |
 | Anchor like `` `funcName` (lines N–M) `` or relative path | Not cmd-clickable | Shape A — bare absolute `/path:N` |
+| Bulleted summary of field mappings (`- foo → bar.baz`) instead of a fenced code block | Bullets are NOT Shape A — substituting them for the required code block is forbidden | Shape A — actual `` ```ts `` block with inline `//` comments |
+| Numbered "Where to look next" / "Next steps" / "Key points" prose enumeration after a code block | Re-uses the forbidden 1./2./3. shape under a different heading | Use a sub-tree, or bullets describing **new** info (not re-narration) |
 
 ### Picker — choose one shape per topic
 
@@ -35,6 +37,8 @@ Relentless, evidence-driven investigation for hard problems. Work until root cau
 If unsure, **default to ASCII tree**. Trees show more structure in less space.
 
 ### Shape A — Inline-Narrated Code (when literal lines matter)
+
+**Shape A REQUIRES a fenced code block** (`` ```<lang> ... ``` ``). Substituting a markdown bullet list of field mappings, a prose paragraph, or a table is NOT Shape A and is forbidden. If you find yourself writing `- fieldA → mapping`, STOP — produce the actual code block instead.
 
 MUST follow ALL five rules. **Rule 4 is the one most often skipped — re-check before sending.**
 
@@ -67,8 +71,8 @@ export async function foo({ id }, ctx) {
 MUST follow ALL four rules. **A tree is NOT a table.** Two-column layouts using `│` + `─` to separate predicate-from-action are forbidden — that is a table, not a hierarchy. The `│` in a tree is a vertical *continuation* of a single parent's children, not a column divider.
 
 1. **Box-drawing chars** `├──` `└──` `│` for hierarchy. Arrows `→` `↓` for sequence. Fenced ASCII block, NO markdown bullets, NO bold-headed paragraphs, NO two-column table layouts.
-2. **Inline `#` comments** on each node, explaining what it does or which branch it represents. Use `#` regardless of host language — this is a diagram, not source code.
-3. **Decision branches** labeled `├── yes → <action>` / `└── no → <action>`. The predicate (the question being tested) becomes the parent node; child nodes carry the resolved action for each answer. Example: `userEntity == nil` is the parent; `├── true → auto-provision both` and `└── false → continue` are the children.
+2. **Inline `#` comments** on each tree node, explaining what it does or which branch it represents. Use `#` regardless of host language — this is a diagram, not source code. **The `→` arrow is NOT a substitute for `#`.** `→` denotes flow / "results in"; `#` carries the explanation. A node `├── foo()` MUST have `# <what foo does>` after it, even when followed by `→ <next step>`.
+3. **Decision branches** labeled `├── yes → <action>` / `└── no → <action>` (or `├── true → ... / └── false → ...`). The predicate becomes the parent node; child nodes are single-line `├── <condition-value> → <action>` entries. If an action has multiple steps, either chain them on one line (`→ stepA → stepB`) OR nest them as further child nodes — do NOT render them as a column of `→ stepN` lines under the same branch.
 4. **Short nodes — one line each.** Function name (or condition) + one-phrase intent. No paragraphs, no multi-sentence nodes, no wrapped text. If a node needs more than one line, split it into a parent-with-children.
 
 **Distinguishing table from tree (do not confuse these):**
