@@ -33,10 +33,10 @@ REQUIRED structure (all five rules):
 1. **Branch summary above** — one sentence naming branches/flow. Don't repeat below.
 2. **Cmd-clickable anchor** above the block in backticks: `` `/abs/path/file.ext:N` ``. Absolute path, single-line `:N` (NOT `:N-M`), no `[label](file://...)` wrapper.
 3. **Fenced `` ```<lang> `` block, ~5–15 lines.** Prune to relevant lines; replace skipped regions with `// ...` (or `#`, `--`, `;` per language).
-4. **`//` comment on EVERY non-trivial line.** This is the core mechanic — a code block without comments is forbidden, equivalent to a verbatim dump. Count: `(non-trivial code lines) == (// comments)`. Skip only obvious lines (`return x`, plain `if err != nil { return err }`).
+4. **`//` comment on EVERY non-trivial line.** This is the core mechanic — a code block without comments is forbidden, equivalent to a verbatim dump. Count: `(non-trivial code lines) == (// comments)`. **Non-trivial includes:** any field mapping inside a return object (`id: personnel.personnelId` is a rename — comment it), any function call (`convertAccess(x)` — comment what the call does or why), any type conversion (`getISOString(x)` — comment the conversion), any guard / branch / loop. **Skip only truly trivial:** bare `return x`, plain `if err != nil { return err }`, plain `}`, plain language keywords with no semantic action. When in doubt, comment it.
 5. **No numbered post-block re-narration.** Post-block prose is for NEW info only (gotchas, dormant paths, cross-cutting insights). NO `1. … 2. … 3. …` under any heading — including disguises like "Where to look next", "To fix: 1./2./3.", "Two places to check", "N steps", "Three states".
 
-✅ Example:
+✅ Example (note one `//` comment per non-trivial line, including return-object field mappings):
 
 Three branches: bad-input rejection, not-found rejection, happy path.
 
@@ -54,12 +54,28 @@ export async function foo({ id }, ctx) {
 }
 ```
 
+✅ Example for a mapping/transform function (every field gets a comment — renames, calls, and conversions are all non-trivial):
+
+`` `/Users/<user>/Developer/<repo>/responses.ts:132` ``:
+
+```ts
+function convertX(x: X.AsObject): XType {
+  return {
+    access: convertAccess(x.access),       // pivot flat proto enum → list-of-pairs
+    body: tryParseJSON(x.body),            // JSON string from gRPC → object (null on parse fail)
+    id: x.xId,                             // rename xId → id for GraphQL shape
+    createdAt: getISOString(x.createdAt),  // epoch int → ISO 8601 string
+    user: convertUser(x.userInfo),         // delegate sub-object transform
+  }
+}
+```
+
 ### Shape B — ASCII Tree / Flow Diagram
 
 REQUIRED structure (all four rules):
 
 1. **Fenced ASCII block** using `├──` `└──` `│` for hierarchy, `→` `↓` for sequence. NOT markdown bullets, NOT bold paragraphs, NOT a two-column `│`+`─` table layout (that's a table, not a tree).
-2. **`#` comment after EVERY non-leaf node**, explaining what it does or which branch it represents. `#` regardless of host language. `[brackets]` for file refs are FORBIDDEN — use `# <file>:<N>` instead. The `→` arrow shows flow, not explanation — it does NOT substitute for `#`.
+2. **`#` comment after EVERY non-leaf node**, explaining what it does or which branch it represents. `#` regardless of host language. **Substitutes are FORBIDDEN:** `[brackets]` for file refs are wrong — use `# <file>:<N>`. Parenthetical descriptions `(creates both stubs)` are wrong — use `# creates both stubs`. The `→` arrow shows flow, not explanation — `node → next` still needs `# what node does`.
 3. **Decision branches** labeled `├── yes → <action>` / `└── no → <action>`. Predicate (`X == nil ?`) goes on the parent node; children carry the resolved values. Raw condition expressions as branch labels (`├── X == nil`) are wrong.
 4. **One line per node.** Function name (or condition) + one-phrase intent. Multi-step actions chain with `→` on the same line OR nest as further children. NEVER as a column of `→ stepN` lines under the same branch.
 
@@ -97,6 +113,8 @@ caller whitelisted ?
 | Numbered list anywhere after a code block / tree, under ANY heading ("Where to look next", "To fix: 1./2./3.", "Three states", "Two places", "Key points 1./2./3.", "N triggering conditions") | Disguised re-narration | Single prose paragraph of NEW info, or extend the tree |
 | Anchor `` `funcName` (lines N–M) `` or relative path | Not cmd-clickable | `/abs/path:N` |
 | Tree with `[brackets]` for file refs | Skill mandates `#` | `# <file>:<N>` |
+| Tree node with parenthetical description `node (does X)` instead of `# does X` | Parens are NOT `#` syntax — skill requires `#` | `node  # does X` |
+| Code block of `return { ... }` object literal without `//` on each field | Each mapping is non-trivial (renames/calls/conversions) | `field: source, // explanation` per line |
 | Tree decision branches as raw conditions (`├── X == nil`) | Decision tree must root at predicate | Predicate parent → `├── yes → ...` / `└── no → ...` |
 | Tree node action chains as column of `→ stepN` lines | Wrap into single-line chain or nest | One-line chain `→ A → B` OR nested children |
 | Markdown table with `│ ─` separators for branching | Table ≠ tree | Tree with `├── └──` |
