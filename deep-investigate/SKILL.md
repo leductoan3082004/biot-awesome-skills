@@ -1,6 +1,6 @@
 ---
 name: deep-investigate
-description: Use when debugging, investigating, troubleshooting, OR walking through code/control flow. Two modes — (a) evidence-driven investigation methodology, and (b) MANDATORY response shape for any code explanation: ASCII tree (`├── └── │` + inline `#`) for branching, fan-out, call hierarchy, decision logic; small ~5–15 line pruned snippet with inline `//` comments and a cmd-clickable absolute-path `:N` anchor when literal lines matter. Verbatim function dumps and post-block 1./2./3. re-narration are forbidden. Triggers — "debug this", "investigate why", "troubleshoot", "root cause", "walk me through", "trace flow", "show me how X works", "what calls what", "decision logic", "fan-out", "how does Y work", "why is this happening".
+description: Use when debugging, investigating, troubleshooting, OR walking through code/control flow. Two modes — (a) evidence-driven investigation methodology, and (b) MANDATORY response shape for any code explanation: ASCII tree (`├── └── │` + inline `#`) for branching, fan-out, call hierarchy, decision logic; small ~5–15 line pruned snippet with inline `//` comments and a cmd-clickable absolute-path `:N` anchor when literal lines matter. **A code block with zero inline `//` comments is a violation — count comments vs non-trivial lines and rewrite if they don't match.** Verbatim function dumps and post-block 1./2./3. re-narration (including disguised as "Where to look next", "N places to check", "Three states") are forbidden. Triggers — "debug this", "investigate why", "walk me through", "trace flow", "show me how X works", "what calls what", "decision logic", "fan-out", "how does Y work".
 ---
 
 # Deep Investigate
@@ -24,7 +24,9 @@ Relentless, evidence-driven investigation for hard problems. Work until root cau
 | 5 separate code blocks quoting each callee in a fan-out | Reader must mentally compose the tree | Shape B — one ASCII tree showing all callees |
 | Anchor like `` `funcName` (lines N–M) `` or relative path | Not cmd-clickable | Shape A — bare absolute `/path:N` |
 | Bulleted summary of field mappings (`- foo → bar.baz`) instead of a fenced code block | Bullets are NOT Shape A — substituting them for the required code block is forbidden | Shape A — actual `` ```ts `` block with inline `//` comments |
-| Numbered "Where to look next" / "Next steps" / "Key points" prose enumeration after a code block | Re-uses the forbidden 1./2./3. shape under a different heading | Use a sub-tree, or bullets describing **new** info (not re-narration) |
+| Numbered "Where to look next" / "Next steps" / "Key points" / "Three input states" / "Two places to check" / "N <noun>" prose enumeration after a code block or tree | Re-uses the forbidden 1./2./3. shape under a different heading. This applies even when content is "new" insight — if the heading invites a numbered list, restructure into prose or a sub-tree | Single prose paragraph of NEW insights, or extend the tree with more nodes |
+| Square brackets `[file.ts:N]` or `[src/path.ts]` for tree node source-location refs | Skill mandates `# comment` — brackets are NOT a substitute | `# <file>:<line>` after the node name |
+| Branch labels using raw condition expressions (`├── userEntity == nil`) instead of predicate-then-yes/no | Decision tree must root at a predicate; children carry resolved values | Parent: `userEntity == nil ?` — children: `├── yes → <action>` / `└── no → ...` |
 
 ### Picker — choose one shape per topic
 
@@ -134,6 +136,26 @@ caller whitelisted?
 ### When neither shape applies
 
 Skip both shapes only for: copy-paste configs, API request/response shape examples, minimal repros where individual lines have no meaning, one-line commands, generated artifacts. For these, keep the block clean and narrate above.
+
+### MANDATORY Self-Check Before Submitting
+
+Run through this checklist before sending ANY response that contains a fenced block of source code or a fenced ASCII tree. If any box would be unchecked, **rewrite** — do not submit.
+
+**If your response has a `` ```<lang> `` source code block (Shape A):**
+
+- [ ] One-sentence branch summary appears above the anchor.
+- [ ] Anchor is a bare absolute path with `:N` (single line), in backticks, no markdown link wrapper.
+- [ ] Block has at least one `//` (or host-language) comment on EVERY non-trivial line. Count: `(# of non-trivial code lines) == (# of inline comments)`.
+- [ ] No `1. … 2. … 3. …` enumeration anywhere after the block — including under headings like "Where to look next", "Two places to check", "N steps", "Three states", "Key points". Any such heading is a smell; rewrite as prose or extend the tree.
+
+**If your response has a fenced ASCII tree (Shape B):**
+
+- [ ] Box-drawing chars `├──` `└──` `│` used (not bullets, not bold paragraphs, not table).
+- [ ] EVERY non-leaf node has a `# <intent>` comment. Brackets `[...]` for source locations are NOT a substitute — convert to `# <file>:<N>`.
+- [ ] If the tree is a decision, parent is the predicate (`X == nil ?`) and children are `├── yes → ...` / `└── no → ...`. Raw condition expressions as child labels (`├── X == nil`) are wrong.
+- [ ] No `1. … 2. … 3. …` enumeration after the tree, under any heading.
+
+**Symptom of skipping the checklist:** the response feels "summarized" or "documentation-style". That's the failure mode. Code-walks are pedagogy, not documentation — every line earns its narration.
 
 ## The Three Laws
 
