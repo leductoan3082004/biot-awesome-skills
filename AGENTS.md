@@ -219,8 +219,24 @@ These apply at all times, across all tasks:
 
 ## Lessons (universal)
 
+- **Code-walk default shape: quote + narrate + inline callees, no orphan refs** — When the user signals "walk me through", "explain how X works", "trace the flow", or "I won't open my IDE", default response is: quote the actual code verbatim in fenced blocks, narrate every non-trivial line in plain English, recursively inline every in-codebase callee until a framework/stdlib leaf, enumerate every branch arm, and never volunteer git history or "where to modify" unless the user asked.
+  - ❌ Bad: "`<some-helper>` is called at `<file>:<line>` — see the file for details", then move on without quoting `<some-helper>`'s body.
+  - ✅ Good: Quote the caller, narrate it, then immediately quote `<some-helper>`'s body and narrate that, then continue.
+- **Skills stay domain-neutral unless their title scopes them** — A reusable skill must work for any codebase / stack unless its name and description explicitly scope to one (`<some-stack>-dev`, etc.). Use generic placeholders (`<repo>`, `<service>`, `<helper>`) in examples, tables, and templates; never bake real product names, ticket IDs, partner identifiers, or in-house tool names into the skill body.
+  - ❌ Bad: Skill example table shows `<RealProductFrontend> → <RealProductGateway> → <RealProductBackend>` as the canonical hop pattern.
+  - ✅ Good: Skill example table shows `<client-repo> → <api-repo> → <service-repo>` with generic placeholders; concrete instances go in the user's response, not in the skill.
+- **Scope research to the named ticket, not the whole domain** — When the user references a specific ticket, fetch it first and scope the walkthrough to only the entities/fields/endpoints the ticket touches; do not expand into the broader domain unless asked.
+  - ❌ Bad: User says "scoped to `<TICKET-ID>`" → continue producing a full domain tour of unrelated subsystems.
+  - ✅ Good: Fetch `<TICKET-ID>`, extract its concrete scope, then re-frame the walkthrough strictly around those entities and explicitly mark adjacent topics as out-of-scope.
+- **Use realistic fixtures before invented complexity** — When a real sample payload or schema exists, base the test on that shape and add only the complexity needed to prove behavior.
+  - ❌ Bad: Test `<some-helper>` with invented nested fields that do not exist in the sample data.
+  - ✅ Good: Test `<some-helper>` with the sample payload's real paths, nested arrays, ids, and untouched values.
+
 Agent-neutral lessons. Newest first. Compact format — one-line rule plus `❌ Bad` / `✅ Good` sub-bullets. If a captured lesson references a specific agent's tooling, paths, or models, it belongs in that agent's companion file (e.g. `CLAUDE.md`), not here.
 
+- **Separate remote services from local build failures** — When a local compile fails while pointing at a remote service, explain that the service only supplies runtime/API data unless evidence shows it changed local module resolution.
+  - ❌ Bad: "Remote `<service-env>` must be broken because local `<frontend-app>` cannot compile."
+  - ✅ Good: "Local `<frontend-app>` compile is failing in module resolution; `<service-env>` is only the API endpoint unless network/schema generation failed."
 - **Explain semantic fault before code proof** — When reviewing a design or mapping bug, state the domain-level mistake in user terms before citing implementation details.
   - ❌ Bad: "Line `<n>` compares `<child-path>` to `<parent-path>`, so the matcher returns false."
   - ✅ Good: "`<ChildField>` should stay inside `<ParentSection>`; the current model treats it as a separate selectable section."
