@@ -201,9 +201,21 @@ Before presenting root cause, pass this gate:
 
 If any box is unchecked: **you're not done. Keep investigating.**
 
-## Response Format When Quoting Code
+## Response Format for Code & Control Flow
 
-Investigations frequently quote source code in the response — to show the suspect line, walk through a function, trace control flow, or demonstrate a transformation. When the response includes a fenced code block of on-disk source, the block must follow the **inline-narrated** shape:
+Investigations frequently need to show how data or control flows through code. The response must communicate the **idea fast**, not be a faithful archive of the source. Pick the right shape per situation:
+
+| Need to show | Use |
+|---|---|
+| A specific suspect line or transformation that depends on syntax | **Inline-narrated code snippet** (small, see below) |
+| Branching / fan-out / call hierarchy / decision tree | **ASCII tree or flow diagram** in a fenced block (no code) |
+| Sequence of cross-service hops | **Arrow chain** `A → B → C` or numbered flow |
+
+Reserve actual code quoting for moments where the literal lines matter. When the topic is "what calls what" or "what branch wins when", a tree communicates faster than 5 separate code blocks.
+
+### Inline-Narrated Code Shape
+
+When the response includes a fenced code block of on-disk source, the block must follow this shape:
 
 1. **Name the branches / control flow** in one sentence above the block. Don't restate them line-by-line below.
 2. **Anchor in backticks** directly above the block as a bare absolute path with `:line` suffix so it's cmd-clickable in iTerm2 → VSCode/Cursor: `` `/abs/path/file.ext:N` ``. Single-line suffix only (`:172`, not `:172-176`). No markdown link wrapping (`[label](file://...)` — terminals ignore it).
@@ -211,7 +223,7 @@ Investigations frequently quote source code in the response — to show the susp
 4. **Inline-comment every non-trivial line** explaining WHAT it does and WHY (when not obvious). Use the host language's comment syntax: `//` for Go/TS/JS/Rust/Java, `#` for Python/Shell/Ruby, `--` for SQL/Lua, `;` for Lisp/Clojure. Skip comments on obvious lines (`return x`, `if err != nil { ... }`) — let them speak for themselves.
 5. **No post-block enumerated narration** (`1. … 2. … 3. …`) that re-describes lines already commented in the snippet. Post-block prose is reserved strictly for content NOT in the snippet — gotchas, dead paths, dormant callers, bridges to the next callee being inlined, cross-cutting insights, or a small `Input → Output` example for non-trivial transforms.
 
-### ❌ Bad — verbatim block + separate numbered list
+#### ❌ Bad — verbatim block + separate numbered list
 
 ```ts
 export async function foo({ id }, ctx) {
@@ -229,7 +241,7 @@ Three parts:
 
 Reader is forced to map `1. → line 2`, `2. → line 3`, `3. → lines 4-5`. Friction per block, multiplied across the dozens of blocks in a real investigation writeup.
 
-### ✅ Good — inline-narrated, pruned, clickable anchor
+#### ✅ Good — inline-narrated, pruned, clickable anchor
 
 Three branches: bad-input rejection, not-found rejection, happy path.
 
@@ -249,6 +261,52 @@ export async function foo({ id }, ctx) {
 
 Each line's explanation sits on the line itself. Zero prose-to-line mapping required.
 
+### ASCII Tree / Flow Shape
+
+When the explanation is about **structure** rather than syntax — call fan-out, decision branches, dependency hierarchies, request paths — use a fenced ASCII diagram instead of code.
+
+Conventions:
+
+- **Box-drawing chars** (`├──`, `└──`, `│`, `─`) for tree hierarchies. Most terminals render these natively.
+- **Arrows** (`→`, `↓`) for sequential flow.
+- **Inline `#` comments** on each node explaining what it does or which branch it represents. Use `#` regardless of host language — this isn't a code excerpt, just a diagram.
+- **Decision branches** rendered as labeled children: `├── yes → <action>` / `└── no → <action>`.
+- **Keep nodes short** — one line per node, function name + one-phrase intent. No prose paragraphs inside the tree.
+
+#### ✅ Good — call fan-out as tree
+
+```
+GetPersonnel(userId)
+├── komrade.GetUser(target)          # identity lookup
+│   └── komrade.GetUser(supervisor)  # only if target.supervisor set
+├── records.GetPersonnelEntities     # user + personnel entity
+│   ├── BatchGetBranchEntities       # by user id
+│   └── BatchGetRelated              # follow UserPersonnel edge
+├── getPermissionContext
+│   ├── authz.BatchIsAuthorizedByTeams   # whitelisted? short-circuit
+│   ├── authz.BatchListMemberGroups      # caller's groups
+│   └── hierarchy.GetWholeHierarchy      # CH tree + Euler tour
+└── makePersonnelProfile
+    ├── userEntity == nil      → auto-provision both
+    ├── personnelEntity == nil → auto-provision personnel only
+    └── both present           → composePersonnel + access mask
+```
+
+#### ✅ Good — decision tree
+
+```
+caller whitelisted?
+├── yes → return full access map, done
+└── no
+    ├── caller.UserID == nil → InvalidInputError
+    └── load caller groups + CH tree
+        └── compute 27-bit access mask via Euler-tour ancestry
+```
+
+#### ❌ Bad — same info as 5 separate code blocks
+
+Reader has to read 5 fenced blocks, mentally compose the tree themselves. Tree shape shows the whole shape in one glance.
+
 ### When NOT to use the inline-narrated shape
 
 Skip inline narration when the block IS the answer and per-line meaning doesn't apply:
@@ -267,6 +325,7 @@ For these, keep the block clean and put any explanation in prose above it.
 - A code block has zero `//` (or `#`) comments and a paragraph below restates the code in English.
 - A code block is a verbatim file paste — every line included regardless of relevance to the investigation.
 - The anchor above is a relative path, a range (`:172-176`), or wrapped in markdown link syntax.
+- The response uses a code block to show "what calls what" or "which branch wins" when an ASCII tree would communicate it faster.
 
 ## Related Skills
 
