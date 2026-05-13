@@ -1,6 +1,6 @@
 ---
 name: deep-investigate
-description: Use when debugging, troubleshooting, or investigating any hard problem — bugs, unexpected behavior, test failures, performance issues, integration failures. Especially when initial investigation stalled, problem spans multiple components, or previous fix attempts failed. Triggers on "debug this", "investigate why", "troubleshoot", "figure out why", "root cause", "something is broken", "this doesn't work", "find the bug", "why is this happening".
+description: Use when debugging, investigating, troubleshooting, OR walking through code/control flow. Two modes — (a) evidence-driven investigation methodology, and (b) MANDATORY response shape for any code explanation: ASCII tree (`├── └── │` + inline `#`) for branching, fan-out, call hierarchy, decision logic; small ~5–15 line pruned snippet with inline `//` comments and a cmd-clickable absolute-path `:N` anchor when literal lines matter. Verbatim function dumps and post-block 1./2./3. re-narration are forbidden. Triggers — "debug this", "investigate why", "troubleshoot", "root cause", "walk me through", "trace flow", "show me how X works", "what calls what", "decision logic", "fan-out", "how does Y work", "why is this happening".
 ---
 
 # Deep Investigate
@@ -8,6 +8,98 @@ description: Use when debugging, troubleshooting, or investigating any hard prob
 Relentless, evidence-driven investigation for hard problems. Work until root cause is **proven**, not until a hypothesis forms.
 
 **Core principle:** A plausible code path that *could* produce the symptom is NOT evidence that it *does*. Prove causation. Never stop at correlation.
+
+## Response Format for Code & Control Flow (MUST FOLLOW)
+
+**Rule:** Any response that explains or walks through on-disk source code MUST pick one of the two shapes below. **Verbatim full-file/function dumps + a separate numbered prose breakdown are forbidden** — that is the exact failure mode this section exists to prevent. This applies even when the user just says "walk me through X" — that phrasing is not a license to paste the whole function.
+
+### Picker — choose one shape per topic
+
+| If the topic is | Use shape |
+|---|---|
+| Branching, fan-out, call hierarchy, decision logic, request flow, "what calls what", "which branch wins" | **ASCII tree** (Shape B) |
+| A specific transformation, a syntax-dependent bug, or one function's literal behavior | **Inline-narrated code** (Shape A) |
+| Cross-service hop sequence | **Arrow chain** `A → B → C` |
+
+If unsure, **default to ASCII tree**. Trees show more structure in less space.
+
+### Shape A — Inline-Narrated Code (when literal lines matter)
+
+MUST follow ALL five rules:
+
+1. **Branch summary above** — one sentence naming the branches/control flow. Do NOT repeat below.
+2. **Cmd-clickable anchor** above the block in backticks: `` `/abs/path/file.ext:N` ``. Absolute path, single-line `:N` (NOT `:N-M`), NO markdown link wrapper (`[label](file://...)` is wrong — terminals ignore it).
+3. **Prune to ~5–15 lines.** Replace skipped regions with the host language's comment syntax (`// ...` for Go/TS/JS, `# ...` for Python/Shell, etc.). Verbatim full-function dumps are forbidden.
+4. **Inline-comment EVERY non-trivial line** explaining WHAT and WHY. Comment syntax matches host language: `//` Go/TS/JS/Rust/Java, `#` Python/Shell/Ruby, `--` SQL/Lua, `;` Lisp. Skip obvious lines (`return x`, plain `if err != nil`).
+5. **No post-block 1./2./3. enumeration** that re-narrates the same lines. Post-block prose is reserved strictly for content NOT in the snippet — gotchas, dormant paths, cross-cutting insights, or a small `Input → Output` example for non-trivial transforms.
+
+**✅ Example:**
+
+Three branches: bad-input rejection, not-found rejection, happy path.
+
+`` `/Users/<user>/Developer/<repo>/<path>/foo.ts:42` ``:
+
+```ts
+export async function foo({ id }, ctx) {
+  // Guard: reject empty id before any RPC
+  if (!id) throw new Error('bad input')
+  // Fetch from downstream service
+  const result = await ctx.svc.fetch(id)
+  // Empty = not found; throw so callers don't get a silent null
+  if (!result) throw new Error('not found')
+  return result
+}
+```
+
+### Shape B — ASCII Tree / Flow Diagram (when structure matters)
+
+MUST follow ALL four rules:
+
+1. **Box-drawing chars** `├──` `└──` `│` for hierarchy. Arrows `→` `↓` for sequence. Fenced ASCII block, NO markdown bullets, NO bold-headed paragraphs.
+2. **Inline `#` comments** on each node, explaining what it does or which branch it represents. Use `#` regardless of host language — this is a diagram, not source code.
+3. **Decision branches** labeled `├── yes → <action>` / `└── no → <action>`. Predicate goes on the parent node; child nodes carry the resolved action.
+4. **Short nodes — one line each.** Function name + one-phrase intent. No paragraphs, no multi-sentence nodes.
+
+**✅ Example — call fan-out:**
+
+```
+GetPersonnel(userId)
+├── komrade.GetUser(target)          # identity lookup
+│   └── komrade.GetUser(supervisor)  # only if target.supervisor set
+├── records.GetPersonnelEntities     # user + personnel entity
+│   ├── BatchGetBranchEntities       # by user id
+│   └── BatchGetRelated              # follow UserPersonnel edge
+└── makePersonnelProfile
+    ├── userEntity == nil      → auto-provision both
+    ├── personnelEntity == nil → auto-provision personnel only
+    └── both present           → composePersonnel + access mask
+```
+
+**✅ Example — decision tree:**
+
+```
+caller whitelisted?
+├── yes → return full access map, done
+└── no
+    ├── caller.UserID == nil → InvalidInputError
+    └── load caller groups + CH tree
+        └── compute access mask via Euler-tour ancestry
+```
+
+### Red Flags — STOP and rewrite
+
+- ❌ Code block with zero `//` (or `#`) comments + a paragraph below restating it in English.
+- ❌ Code block followed by `1. … 2. … 3. …` re-narrating the same lines.
+- ❌ Anchor uses relative path, range syntax (`:172-176`), or `[label](file://...)` markdown link wrapper.
+- ❌ Anchor is the function name alone (`` `convertPersonnel` (lines 132–141) ``) instead of the absolute file path with `:N`.
+- ❌ Branching/fan-out rendered as 5 separate code blocks instead of one tree.
+- ❌ Decision logic rendered as bold-headed paragraphs (`**Input: X == nil**`) instead of a labeled tree.
+- ❌ Tree nodes use `[brackets]` instead of `#` for inline comments.
+- ❌ Verbatim file paste — every line of the function included regardless of relevance.
+
+### When neither shape applies
+
+Skip both shapes only for: copy-paste configs, API request/response shape examples, minimal repros where individual lines have no meaning, one-line commands, generated artifacts. For these, keep the block clean and narrate above.
 
 ## The Three Laws
 
@@ -201,134 +293,8 @@ Before presenting root cause, pass this gate:
 
 If any box is unchecked: **you're not done. Keep investigating.**
 
-## Response Format for Code & Control Flow
-
-Investigations frequently need to show how data or control flows through code. The response must communicate the **idea fast**, not be a faithful archive of the source. Pick the right shape per situation:
-
-| Need to show | Use |
-|---|---|
-| A specific suspect line or transformation that depends on syntax | **Inline-narrated code snippet** (small, see below) |
-| Branching / fan-out / call hierarchy / decision tree | **ASCII tree or flow diagram** in a fenced block (no code) |
-| Sequence of cross-service hops | **Arrow chain** `A → B → C` or numbered flow |
-
-Reserve actual code quoting for moments where the literal lines matter. When the topic is "what calls what" or "what branch wins when", a tree communicates faster than 5 separate code blocks.
-
-### Inline-Narrated Code Shape
-
-When the response includes a fenced code block of on-disk source, the block must follow this shape:
-
-1. **Name the branches / control flow** in one sentence above the block. Don't restate them line-by-line below.
-2. **Anchor in backticks** directly above the block as a bare absolute path with `:line` suffix so it's cmd-clickable in iTerm2 → VSCode/Cursor: `` `/abs/path/file.ext:N` ``. Single-line suffix only (`:172`, not `:172-176`). No markdown link wrapping (`[label](file://...)` — terminals ignore it).
-3. **Prune the snippet** to only the lines that carry the explanation. Replace skipped regions with the language's comment syntax (e.g. `// ...` for Go/TS/JS).
-4. **Inline-comment every non-trivial line** explaining WHAT it does and WHY (when not obvious). Use the host language's comment syntax: `//` for Go/TS/JS/Rust/Java, `#` for Python/Shell/Ruby, `--` for SQL/Lua, `;` for Lisp/Clojure. Skip comments on obvious lines (`return x`, `if err != nil { ... }`) — let them speak for themselves.
-5. **No post-block enumerated narration** (`1. … 2. … 3. …`) that re-describes lines already commented in the snippet. Post-block prose is reserved strictly for content NOT in the snippet — gotchas, dead paths, dormant callers, bridges to the next callee being inlined, cross-cutting insights, or a small `Input → Output` example for non-trivial transforms.
-
-#### ❌ Bad — verbatim block + separate numbered list
-
-```ts
-export async function foo({ id }, ctx) {
-  if (!id) throw new Error('bad input')
-  const result = await ctx.svc.fetch(id)
-  if (!result) throw new Error('not found')
-  return result
-}
-```
-
-Three parts:
-1. Validates input, throws on missing id.
-2. Calls the service to fetch data.
-3. Throws on empty result, otherwise returns it.
-
-Reader is forced to map `1. → line 2`, `2. → line 3`, `3. → lines 4-5`. Friction per block, multiplied across the dozens of blocks in a real investigation writeup.
-
-#### ✅ Good — inline-narrated, pruned, clickable anchor
-
-Three branches: bad-input rejection, not-found rejection, happy path.
-
-`` `/Users/toale/Developer/<repo>/<path>/foo.ts:42` ``:
-
-```ts
-export async function foo({ id }, ctx) {
-  // Guard: reject empty/missing id before issuing any RPC
-  if (!id) throw new Error('bad input')
-  // Fetch from the downstream service
-  const result = await ctx.svc.fetch(id)
-  // Empty response = not found; throw so callers don't get a silent null
-  if (!result) throw new Error('not found')
-  return result   // happy path
-}
-```
-
-Each line's explanation sits on the line itself. Zero prose-to-line mapping required.
-
-### ASCII Tree / Flow Shape
-
-When the explanation is about **structure** rather than syntax — call fan-out, decision branches, dependency hierarchies, request paths — use a fenced ASCII diagram instead of code.
-
-Conventions:
-
-- **Box-drawing chars** (`├──`, `└──`, `│`, `─`) for tree hierarchies. Most terminals render these natively.
-- **Arrows** (`→`, `↓`) for sequential flow.
-- **Inline `#` comments** on each node explaining what it does or which branch it represents. Use `#` regardless of host language — this isn't a code excerpt, just a diagram.
-- **Decision branches** rendered as labeled children: `├── yes → <action>` / `└── no → <action>`.
-- **Keep nodes short** — one line per node, function name + one-phrase intent. No prose paragraphs inside the tree.
-
-#### ✅ Good — call fan-out as tree
-
-```
-GetPersonnel(userId)
-├── komrade.GetUser(target)          # identity lookup
-│   └── komrade.GetUser(supervisor)  # only if target.supervisor set
-├── records.GetPersonnelEntities     # user + personnel entity
-│   ├── BatchGetBranchEntities       # by user id
-│   └── BatchGetRelated              # follow UserPersonnel edge
-├── getPermissionContext
-│   ├── authz.BatchIsAuthorizedByTeams   # whitelisted? short-circuit
-│   ├── authz.BatchListMemberGroups      # caller's groups
-│   └── hierarchy.GetWholeHierarchy      # CH tree + Euler tour
-└── makePersonnelProfile
-    ├── userEntity == nil      → auto-provision both
-    ├── personnelEntity == nil → auto-provision personnel only
-    └── both present           → composePersonnel + access mask
-```
-
-#### ✅ Good — decision tree
-
-```
-caller whitelisted?
-├── yes → return full access map, done
-└── no
-    ├── caller.UserID == nil → InvalidInputError
-    └── load caller groups + CH tree
-        └── compute 27-bit access mask via Euler-tour ancestry
-```
-
-#### ❌ Bad — same info as 5 separate code blocks
-
-Reader has to read 5 fenced blocks, mentally compose the tree themselves. Tree shape shows the whole shape in one glance.
-
-### When NOT to use the inline-narrated shape
-
-Skip inline narration when the block IS the answer and per-line meaning doesn't apply:
-
-- copy-paste config snippets meant to be pasted verbatim,
-- API request/response shape examples,
-- minimal repros where lines have no individual meaning,
-- one-line commands,
-- generated artifacts (codegen, proto output) where added comments would mislead.
-
-For these, keep the block clean and put any explanation in prose above it.
-
-### Red Flags — STOP and rewrite the block
-
-- A code block is followed by `1. … 2. … 3. …` describing what the block does line-by-line.
-- A code block has zero `//` (or `#`) comments and a paragraph below restates the code in English.
-- A code block is a verbatim file paste — every line included regardless of relevance to the investigation.
-- The anchor above is a relative path, a range (`:172-176`), or wrapped in markdown link syntax.
-- The response uses a code block to show "what calls what" or "which branch wins" when an ASCII tree would communicate it faster.
-
 ## Related Skills
 
 - **superpowers:systematic-debugging** — 4-phase debugging framework. Deep-investigate extends it with stricter evidence requirements and anti-pattern-matching enforcement.
 - **context-save** — Checkpoint investigation state during long sessions. Use when switching tasks or ending session mid-investigation.
-- **clickable-file-anchors** — Formal spec for the cmd-clickable anchor format used by the `Response Format When Quoting Code` section above. Loaded automatically when this skill applies.
+- **clickable-file-anchors** — Formal spec for the cmd-clickable anchor format used in Shape A above. Loaded automatically when this skill applies.
