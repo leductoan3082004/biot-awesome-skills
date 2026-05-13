@@ -13,6 +13,17 @@ Relentless, evidence-driven investigation for hard problems. Work until root cau
 
 **Rule:** Any response that explains or walks through on-disk source code MUST pick one of the two shapes below. **Verbatim full-file/function dumps + a separate numbered prose breakdown are forbidden** — that is the exact failure mode this section exists to prevent. This applies even when the user just says "walk me through X" — that phrasing is not a license to paste the whole function.
 
+### Forbidden Output Shapes (do NOT produce these)
+
+| Shape you might default to | Why it's forbidden | What to use instead |
+|---|---|---|
+| Verbatim function + `1. … 2. … 3. …` prose below | Reader must map prose↔line | Inline-narrated code (Shape A) |
+| Code block of source with **zero** `//` comments inside | Comments ARE the explanation here | Shape A — add `//` to every non-trivial line |
+| Bold-headed paragraphs (`**Input: X == nil**` … paragraph …) for branching/decision logic | Not skimmable, not a tree | Shape B — ASCII tree with `├── └──` |
+| Markdown table with `│` + `─` separators for branching/decision logic | A table is NOT a tree — `│` between two cells ≠ tree hierarchy | Shape B — ASCII tree with `├── └──` rooted at predicate |
+| 5 separate code blocks quoting each callee in a fan-out | Reader must mentally compose the tree | Shape B — one ASCII tree showing all callees |
+| Anchor like `` `funcName` (lines N–M) `` or relative path | Not cmd-clickable | Shape A — bare absolute `/path:N` |
+
 ### Picker — choose one shape per topic
 
 | If the topic is | Use shape |
@@ -25,12 +36,12 @@ If unsure, **default to ASCII tree**. Trees show more structure in less space.
 
 ### Shape A — Inline-Narrated Code (when literal lines matter)
 
-MUST follow ALL five rules:
+MUST follow ALL five rules. **Rule 4 is the one most often skipped — re-check before sending.**
 
 1. **Branch summary above** — one sentence naming the branches/control flow. Do NOT repeat below.
 2. **Cmd-clickable anchor** above the block in backticks: `` `/abs/path/file.ext:N` ``. Absolute path, single-line `:N` (NOT `:N-M`), NO markdown link wrapper (`[label](file://...)` is wrong — terminals ignore it).
 3. **Prune to ~5–15 lines.** Replace skipped regions with the host language's comment syntax (`// ...` for Go/TS/JS, `# ...` for Python/Shell, etc.). Verbatim full-function dumps are forbidden.
-4. **Inline-comment EVERY non-trivial line** explaining WHAT and WHY. Comment syntax matches host language: `//` Go/TS/JS/Rust/Java, `#` Python/Shell/Ruby, `--` SQL/Lua, `;` Lisp. Skip obvious lines (`return x`, plain `if err != nil`).
+4. **Inline-comment EVERY non-trivial line.** This is the core mechanic of Shape A. A pruned snippet WITHOUT inline comments is NOT Shape A — it is a forbidden verbatim dump. Each `if`, each call, each transformation, each return that isn't trivial gets a `// what + why` comment ON THE LINE. Comment syntax matches host language: `//` Go/TS/JS/Rust/Java, `#` Python/Shell/Ruby, `--` SQL/Lua, `;` Lisp. Only skip the obviously-trivial: bare `return x`, plain `if err != nil { return err }`. **Self-check before submitting: count the non-trivial lines in your snippet vs the count of `//` comments. The two counts MUST match.**
 5. **No post-block 1./2./3. enumeration** that re-narrates the same lines. Post-block prose is reserved strictly for content NOT in the snippet — gotchas, dormant paths, cross-cutting insights, or a small `Input → Output` example for non-trivial transforms.
 
 **✅ Example:**
@@ -53,12 +64,31 @@ export async function foo({ id }, ctx) {
 
 ### Shape B — ASCII Tree / Flow Diagram (when structure matters)
 
-MUST follow ALL four rules:
+MUST follow ALL four rules. **A tree is NOT a table.** Two-column layouts using `│` + `─` to separate predicate-from-action are forbidden — that is a table, not a hierarchy. The `│` in a tree is a vertical *continuation* of a single parent's children, not a column divider.
 
-1. **Box-drawing chars** `├──` `└──` `│` for hierarchy. Arrows `→` `↓` for sequence. Fenced ASCII block, NO markdown bullets, NO bold-headed paragraphs.
+1. **Box-drawing chars** `├──` `└──` `│` for hierarchy. Arrows `→` `↓` for sequence. Fenced ASCII block, NO markdown bullets, NO bold-headed paragraphs, NO two-column table layouts.
 2. **Inline `#` comments** on each node, explaining what it does or which branch it represents. Use `#` regardless of host language — this is a diagram, not source code.
-3. **Decision branches** labeled `├── yes → <action>` / `└── no → <action>`. Predicate goes on the parent node; child nodes carry the resolved action.
-4. **Short nodes — one line each.** Function name + one-phrase intent. No paragraphs, no multi-sentence nodes.
+3. **Decision branches** labeled `├── yes → <action>` / `└── no → <action>`. The predicate (the question being tested) becomes the parent node; child nodes carry the resolved action for each answer. Example: `userEntity == nil` is the parent; `├── true → auto-provision both` and `└── false → continue` are the children.
+4. **Short nodes — one line each.** Function name (or condition) + one-phrase intent. No paragraphs, no multi-sentence nodes, no wrapped text. If a node needs more than one line, split it into a parent-with-children.
+
+**Distinguishing table from tree (do not confuse these):**
+
+```
+WRONG — table layout (forbidden):
+Predicate          │  Action
+───────────────────┼──────────────────
+A == nil           │  do X
+A != nil, B == nil │  do Y
+both non-nil       │  do Z
+
+RIGHT — tree layout (required):
+A == nil ?
+├── yes → do X
+└── no
+    └── B == nil ?
+        ├── yes → do Y
+        └── no  → do Z
+```
 
 **✅ Example — call fan-out:**
 
