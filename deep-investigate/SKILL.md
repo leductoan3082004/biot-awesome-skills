@@ -30,7 +30,7 @@ Default to Shape B when unsure. Trees show more in less space.
 
 REQUIRED structure (all five rules):
 
-1. **Branch summary above** — one sentence naming branches/flow. Don't repeat below.
+1. **Summary sentence above the anchor** — one sentence naming branches/flow (for branching functions) OR the function's purpose (for non-branching functions like mappers/transforms). NEVER skip this — the anchor must not be the first thing on the line. Examples: "Three branches: bad-input, not-found, happy path." OR "Maps gRPC `X.AsObject` to GraphQL `XType` shape — every field is a rename, call, or conversion."
 2. **Cmd-clickable anchor** above the block in backticks: `` `/abs/path/file.ext:N` ``. Absolute path, single-line `:N` (NOT `:N-M`), no `[label](file://...)` wrapper.
 3. **Fenced `` ```<lang> `` block, ~5–15 lines.** Prune to relevant lines; replace skipped regions with `// ...` (or `#`, `--`, `;` per language).
 4. **`//` comment on EVERY non-trivial line.** This is the core mechanic — a code block without comments is forbidden, equivalent to a verbatim dump. Count: `(non-trivial code lines) == (// comments)`. **Non-trivial includes:** any field mapping inside a return object (`id: personnel.personnelId` is a rename — comment it), any function call (`convertAccess(x)` — comment what the call does or why), any type conversion (`getISOString(x)` — comment the conversion), any guard / branch / loop. **Skip only truly trivial:** bare `return x`, plain `if err != nil { return err }`, plain `}`, plain language keywords with no semantic action. When in doubt, comment it.
@@ -54,7 +54,9 @@ export async function foo({ id }, ctx) {
 }
 ```
 
-✅ Example for a mapping/transform function (every field gets a comment — renames, calls, and conversions are all non-trivial):
+✅ Example for a mapping/transform function (note the summary sentence above the anchor, AND every field including pass-throughs has a `//` comment):
+
+Maps gRPC `X.AsObject` to GraphQL `XType` — every field is a rename, function call, type conversion, or annotated pass-through.
 
 `` `/Users/<user>/Developer/<repo>/responses.ts:132` ``:
 
@@ -64,11 +66,14 @@ function convertX(x: X.AsObject): XType {
     access: convertAccess(x.access),       // pivot flat proto enum → list-of-pairs
     body: tryParseJSON(x.body),            // JSON string from gRPC → object (null on parse fail)
     id: x.xId,                             // rename xId → id for GraphQL shape
+    txid: x.txid,                          // pass-through; same name on both sides
     createdAt: getISOString(x.createdAt),  // epoch int → ISO 8601 string
     user: convertUser(x.userInfo),         // delegate sub-object transform
   }
 }
 ```
+
+The pass-through line (`txid: x.txid`) still gets a `//` annotation noting that it's unchanged. **Every line inside the `return {}` literal earns a comment — no exceptions.**
 
 ### Shape B — ASCII Tree / Flow Diagram
 
@@ -76,7 +81,18 @@ REQUIRED structure (all four rules):
 
 1. **Fenced ASCII block** using `├──` `└──` `│` for hierarchy, `→` `↓` for sequence. NOT markdown bullets, NOT bold paragraphs, NOT a two-column `│`+`─` table layout (that's a table, not a tree).
 2. **`#` comment after EVERY non-leaf node**, explaining what it does or which branch it represents. `#` regardless of host language. **Substitutes are FORBIDDEN:** `[brackets]` for file refs are wrong — use `# <file>:<N>`. Parenthetical descriptions `(creates both stubs)` are wrong — use `# creates both stubs`. The `→` arrow shows flow, not explanation — `node → next` still needs `# what node does`.
-3. **Decision branches** labeled `├── yes → <action>` / `└── no → <action>`. Predicate (`X == nil ?`) goes on the parent node; children carry the resolved values. Raw condition expressions as branch labels (`├── X == nil`) are wrong.
+3. **Decision branches** labeled `├── yes → <action>` / `└── no → <action>`. Predicate (`X == nil ?`) goes on the parent node; children carry the resolved values. Raw condition expressions as branch labels (`├── X == nil`) are wrong — even for sequential `if`-chains in source code, the tree representation MUST nest. Example: source code `if A == nil { ... } if B == nil { ... } /* else fallthrough */` becomes:
+
+```
+A == nil ?
+├── yes → <action when A is nil>
+└── no
+    └── B == nil ?
+        ├── yes → <action when only B is nil>
+        └── no  → <fallthrough action>
+```
+
+NOT a flat list of conditions.
 4. **One line per node.** Function name (or condition) + one-phrase intent. Multi-step actions chain with `→` on the same line OR nest as further children. NEVER as a column of `→ stepN` lines under the same branch.
 
 ✅ Example fan-out:
