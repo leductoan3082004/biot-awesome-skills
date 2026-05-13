@@ -146,6 +146,9 @@ Default to surfacing uncertainty, not hiding it.
 
 Newest bullets first. Compact format — one-line rule plus `❌ Bad` / `✅ Good` sub-bullets. Captured automatically by `hooks/pattern-observer.py`. Examples must be generic (no project codenames, ticket IDs, internal artifacts). If a lesson is genuinely agent-neutral (no `~/.claude/*` paths, no Claude-specific models or tools, no `Agent`-tool semantics), promote it to `AGENTS.md` Lessons instead.
 
+- **Restrict "use MCP" investigations to server/API MCPs first** — When user asks to "use MCP" to trace/debug, default to log/DB/API MCPs (Splunk, Grafana, Jira, T3). Do not silently fall back to browser-automation MCPs (Chrome) when those fail; surface the blocker (e.g. VPN) and wait for the user to unblock.
+  - ❌ Bad: Splunk DNS fails -> spin up Chrome MCP and scrape data through a logged-in browser tab.
+  - ✅ Good: Splunk DNS fails -> tell user "Splunk unreachable, need VPN" and pause until they reconnect.
 - **Sync hook + global rule edits to biot remote** — When any file under `biot-awesome-skills/hooks/`, this `CLAUDE.md`, or `AGENTS.md` is modified, commit and push to the biot remote in the same turn.
   - ❌ Bad: Edit `~/.claude/hooks/<some-hook>.py` locally, leave biot dirty/untracked, never push.
   - ✅ Good: Edit via the symlink, then `cd biot-awesome-skills && git add hooks AGENTS.md CLAUDE.md && git commit -m "<type>: <subject>" && git push --no-verify`.
