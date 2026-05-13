@@ -219,6 +219,15 @@ These apply at all times, across all tasks:
 
 ## Lessons (universal)
 
+- **`head -N` is portable only as `head -n N`; bare `-N` form is unreliable on BSD/macOS** — Use the explicit `-n COUNT` form when truncating files via `head`, especially before destructive cleanup (`rm` of the original). On BSD `head` the legacy `-COUNT` parser can mis-route a 4-digit count and silently emit far fewer lines than requested. Always verify line count of the output BEFORE deleting the source.
+  - ❌ Bad: `head -1999 archive.jsonl > out.jsonl && rm archive.jsonl` — got 1000 lines instead of 1999, source already gone.
+  - ✅ Good: `head -n 1999 archive.jsonl > out.jsonl && [ "$(wc -l < out.jsonl)" -eq 1999 ] && rm archive.jsonl` — explicit flag + verification gate before deleting the only copy.
+- **Observability/learning installs decompose into capture → analyze → store → apply; wiring only one layer is not "installed"** — When installing telemetry, lesson-extraction, or "agent learns over time" systems, surface the four layers and which are live; never claim the system is installed when only capture is wired, because the user expects behavior change.
+  - ❌ Bad: Wire PreToolUse/PostToolUse hooks → report "continuous learning installed" → user assumes agent now learns from faults, when in fact no analyzer/apply layer is running.
+  - ✅ Good: Wire capture → explicitly state "capture ON, analyzer parked, apply not wired" → list the exact extra steps needed before any behavior change happens.
+- **Differentiate replace-in-place from remove-and-add** — When the user asks to remove an old artifact and copy/import another one, delete the old artifact path and install the new artifact under its own name unless they explicitly ask to preserve the old path.
+  - ❌ Bad: "Remove `<old-artifact>` and add `<new-artifact>`" → overwrite `<old-artifact>` with `<new-artifact>` content while keeping `<old-artifact>` alive.
+  - ✅ Good: Delete `<old-artifact>/`, copy `<new-artifact>/` from the source, and keep `<new-artifact>` metadata unchanged.
 - **Code-walk anchors: absolute path + `:line` for cmd-click** — When introducing a quoted source code block in a response, the inline anchor must be a bare absolute path with a single-line suffix (`:N`) inside backticks, placed directly above the fenced block, so terminal-to-IDE handoffs (cmd-click in iTerm2/Warp/Terminal → VSCode/Cursor/Neovim) jump to the right place. No range syntax (`:N-M` does not parse), no markdown link wrapping (`[label](file://...)` is ignored by terminals). Range info is preserved visually by the quoted lines themselves.
   - ❌ Bad: `` `<repo>/<subpath>/<file>:172-176` `` (relative path, range syntax) followed by fenced block — not clickable.
   - ✅ Good: `` `/<absolute>/<repo>/<subpath>/<file>:172` `` directly before fenced block; range shown by the quoted code.
