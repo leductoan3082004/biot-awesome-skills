@@ -219,6 +219,9 @@ These apply at all times, across all tasks:
 
 ## Lessons (universal)
 
+- **Show concrete I/O examples for complex transforms, not just logic prose** — When walking through a function that transforms / walks / fans out / composes / serializes data, attach a minimal realistic `Input → Output` example after the prose summary. Logic prose alone is slow to reason about; shapes are fast. Trigger when input shape ≠ output shape, recursion / tree walk, ≥2 branches with structurally different returns, joining multiple sources, or any non-obvious filtering/grouping. Use realistic fixtures (tests, sample payloads); never fabricate — write `UNKNOWN: <shape>` instead.
+  - ❌ Bad: "`<some-walker>` recurses through the schema, accumulating fields that pass `<predicate>` and skipping the rest." (No shapes shown.)
+  - ✅ Good: After the prose, attach `Input: <minimal schema fragment>` and `Output: <resulting columns/rows array>` in a fenced block so the reader sees the transform.
 - **Code-walk default shape: quote + narrate + inline callees, no orphan refs** — When the user signals "walk me through", "explain how X works", "trace the flow", or "I won't open my IDE", default response is: quote the actual code verbatim in fenced blocks, narrate every non-trivial line in plain English, recursively inline every in-codebase callee until a framework/stdlib leaf, enumerate every branch arm, and never volunteer git history or "where to modify" unless the user asked.
   - ❌ Bad: "`<some-helper>` is called at `<file>:<line>` — see the file for details", then move on without quoting `<some-helper>`'s body.
   - ✅ Good: Quote the caller, narrate it, then immediately quote `<some-helper>`'s body and narrate that, then continue.
