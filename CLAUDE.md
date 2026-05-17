@@ -189,9 +189,9 @@ Available gstack skills:
 
 Newest bullets first. Compact format — one-line rule plus `❌ Bad` / `✅ Good` sub-bullets. Captured automatically by `hooks/pattern-observer.py`. Examples must be generic (no project codenames, ticket IDs, internal artifacts). If a lesson is genuinely agent-neutral (no `~/.claude/*` paths, no Claude-specific models or tools, no `Agent`-tool semantics), promote it to `AGENTS.md` Lessons instead.
 
-- **Statusline `context_window_size` reports model max, not active limit** — Claude Code's statusline JSON exposes `context_window.context_window_size` as the model's maximum (e.g. 1000000 for Opus 4.7), even when the active chat window is the 200K default. Computing `used_percentage` against that field under-reports usage by 5×. Compute manually against the user's actual limit (default 200K, override via env var) using `context_window.total_input_tokens`.
-  - ❌ Bad: Use `.context_window.used_percentage` directly → bar shows 9% when real usage is 45% on a standard-context session.
-  - ✅ Good: `pct = total_input_tokens * 100 / 200000` with env override for users on extended context.
+- **Statusline context limit: read JSON field per-update, don't hardcode** — Claude Code's statusline JSON exposes `.context_window.context_window_size` per model variant (1M for Opus 4.7 `[1m]`, 200K for Sonnet 4.6, etc.). Read it dynamically so the bar auto-recalibrates when switching models mid-session. Compute `total_input_tokens * 100 / context_window_size`; fall back chain: JSON field → `CC_CONTEXT_LIMIT` env → 200K default. Avoid `.context_window.used_percentage` directly — historically lagged.
+  - ❌ Bad: `CTX_LIMIT=200000` hardcoded → bar wrong by 5× when user switches to a 1M-context model.
+  - ✅ Good: `ctx_size=$(jq -r '.context_window.context_window_size // empty')` then `CTX_LIMIT="${ctx_size:-${CC_CONTEXT_LIMIT:-200000}}"`.
 - **Restrict "use MCP" investigations to server/API MCPs first** — When user asks to "use MCP" to trace/debug, default to log/DB/API MCPs (Splunk, Grafana, Jira, T3). Do not silently fall back to browser-automation MCPs (Chrome) when those fail; surface the blocker (e.g. VPN) and wait for the user to unblock.
   - ❌ Bad: Splunk DNS fails -> spin up Chrome MCP and scrape data through a logged-in browser tab.
   - ✅ Good: Splunk DNS fails -> tell user "Splunk unreachable, need VPN" and pause until they reconnect.
