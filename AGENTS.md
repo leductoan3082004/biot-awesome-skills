@@ -219,6 +219,15 @@ These apply at all times, across all tasks:
 
 ## Lessons (universal)
 
+- **Background sub-agents have no parent transcript** — A sub-agent dispatched via the agent tool (especially `run_in_background: true`) starts fresh with zero conversation history, so any task framed as "summarize what we just discussed" or "checkpoint our decisions" must be pre-digested by the parent and embedded inline in the sub-agent's prompt; otherwise the sub-agent fabricates, blocks on an interactive prompt it cannot answer, or returns nothing useful.
+  - ❌ Bad: `Agent(prompt: "invoke <some-context-save-skill> and capture our recent decisions")` — sub-agent has no transcript and the interactive skill stalls waiting for human input it will never get.
+  - ✅ Good: Parent writes a short digest string (decisions, files touched, branch state), embeds it verbatim in the sub-agent's prompt, and instructs the sub-agent to feed those exact strings into the downstream skill's prompts.
+- **Technical docs must stage abstraction before implementation** — Start with the user-visible problem in PM-readable language, keep exact identifiers out of the top half, then place concise before/after code shapes under the requirement they satisfy with notes on what was omitted and why.
+  - ❌ Bad: Open with "Decision: add `<SomePermission>` to `<SomeService>`" and put all snippets in a final appendix.
+  - ✅ Good: Open with "Problem: users cannot complete `<some-workflow>` when `<some-condition>` happens" and later show the final `<some-helper>` shape under the matching requirement.
+- **Do not infer active identity from displayed ownership labels** — When explaining permission behavior, separate the signed-in user from labels showing author, owner, assignee, creator, or last editor; verify which identity is active before attributing access to ownership.
+  - ❌ Bad: "You can see `<some-record>` because the header shows `<some-owner>`." 
+  - ✅ Good: "The header shows `<some-owner>`; active user is separate, so visibility must come from `<some-permission>` or missing filtering unless verified otherwise."
 - **`head -N` is portable only as `head -n N`; bare `-N` form is unreliable on BSD/macOS** — Use the explicit `-n COUNT` form when truncating files via `head`, especially before destructive cleanup (`rm` of the original). On BSD `head` the legacy `-COUNT` parser can mis-route a 4-digit count and silently emit far fewer lines than requested. Always verify line count of the output BEFORE deleting the source.
   - ❌ Bad: `head -1999 archive.jsonl > out.jsonl && rm archive.jsonl` — got 1000 lines instead of 1999, source already gone.
   - ✅ Good: `head -n 1999 archive.jsonl > out.jsonl && [ "$(wc -l < out.jsonl)" -eq 1999 ] && rm archive.jsonl` — explicit flag + verification gate before deleting the only copy.
@@ -249,6 +258,9 @@ These apply at all times, across all tasks:
 
 Agent-neutral lessons. Newest first. Compact format — one-line rule plus `❌ Bad` / `✅ Good` sub-bullets. If a captured lesson references a specific agent's tooling, paths, or models, it belongs in that agent's companion file (e.g. `CLAUDE.md`), not here.
 
+- **Pre-existing bug ≠ deferrable when new feature's promise depends on the leaky surface** — When triaging "is this bug pre-existing, can we defer it?", check whether the new feature's stated promise is functionally defeated if the leak stays open. If the leaky surface is the primary read/write path the new feature is supposed to gate, deferral breaks the feature on day one even though no regression was introduced. Pre-existing-ness is necessary but not sufficient for deferral; the second test is "do the leak's exposed users overlap with the new feature's restricted users?".
+  - ❌ Bad: "`<some-audit-log>` leak existed before this ticket, so defer like any other inherited bug" — ignores that new `<SomeFieldPermission>` is *meant* to hide those field changes from a specific user class, which audit log directly exposes.
+  - ✅ Good: "Pre-existing? yes. Regression? no. Must solve in this ticket? yes — `<audit-readers>` ∩ `<users-restricted-by-new-perm>` ≠ ∅, so leaving the leak defeats the new permission's core promise."
 - **Separate remote services from local build failures** — When a local compile fails while pointing at a remote service, explain that the service only supplies runtime/API data unless evidence shows it changed local module resolution.
   - ❌ Bad: "Remote `<service-env>` must be broken because local `<frontend-app>` cannot compile."
   - ✅ Good: "Local `<frontend-app>` compile is failing in module resolution; `<service-env>` is only the API endpoint unless network/schema generation failed."
