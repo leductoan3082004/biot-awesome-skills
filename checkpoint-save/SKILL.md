@@ -105,6 +105,21 @@ When consolidation finishes, the turn ends. Do **not** add a "checkpoint done" l
 | Forgetting Step 3 consolidation | Run the bash block after every successful `context-save`. Without it, `checkpoints/` accumulates files turn over turn. |
 | Trying to merge old CONTEXT.md into the new one | Overwrite it. History lives in git, not in stacked frontmatter. |
 
+## Auto-restore at session boundaries
+
+A companion `SessionStart` hook (`hooks/inject-checkpoint-context.sh`, wired in `~/.claude/settings.json` with matcher `startup|resume|clear|compact`) auto-injects the project's `CONTEXT.md` into the new session's context whenever Claude Code starts up, resumes, clears, or compacts. The agent reads it before the user's first turn, so a session that begins after `/clear`, after `/compact`, or in a fresh window continues from the most recent checkpoint instead of starting clean.
+
+The hook:
+- Reads `CLAUDE_PROJECT_DIR` to find the active project.
+- Resolves the gstack slug via `~/.claude/skills/gstack/bin/gstack-slug`.
+- Looks for `~/.gstack/projects/$SLUG/CONTEXT.md`.
+- Prints a header + the file content to stdout. Claude Code injects stdout as additional context.
+- Exits 0 silently when there is no slug, no file, or no gstack — never fails the session start.
+
+This means the writer half (this skill) and the reader half (the SessionStart hook) form one closed loop: every save goes to a known canonical path, every new session reads from that same path. There is no separate "restore" command to run.
+
+If the user explicitly asks something unrelated as their first turn, abandon the restored context — the header tells the agent so. Otherwise resume from the **Remaining Work** list.
+
 ## Notes on Foreground Behavior
 
 - `context-save` (gstack flavor) prints a preamble with branch / proactive / telemetry flags before its interactive flow. That output is expected and not pollution from this wrapper.
