@@ -189,6 +189,9 @@ Available gstack skills:
 
 Newest bullets first. Compact format — one-line rule plus `❌ Bad` / `✅ Good` sub-bullets. Captured automatically by `hooks/pattern-observer.py`. Examples must be generic (no project codenames, ticket IDs, internal artifacts). If a lesson is genuinely agent-neutral (no `~/.claude/*` paths, no Claude-specific models or tools, no `Agent`-tool semantics), promote it to `AGENTS.md` Lessons instead.
 
+- **Mirror personal skills across all agent skill dirs** — When installing or removing a personal skill, symlink (or remove) it in every agent's skill directory in the same turn, not just Claude Code's. Codex lives at `~/.agents/skills/`, Claude Code at `~/.claude/skills/`. Keeping them symmetric means the same `/skill-name` works no matter which agent the user opens next; missing one half silently regresses the other agent.
+  - ❌ Bad: `ln -s <repo>/<skill> ~/.claude/skills/<skill>` only, then call the install done.
+  - ✅ Good: Symlink into both `~/.claude/skills/<skill>` *and* `~/.agents/skills/<skill>` in the same commit; remove from both when retiring.
 - **Statusline context limit: read JSON field per-update, don't hardcode** — Claude Code's statusline JSON exposes `.context_window.context_window_size` per model variant (1M for Opus 4.7 `[1m]`, 200K for Sonnet 4.6, etc.). Read it dynamically so the bar auto-recalibrates when switching models mid-session. Compute `total_input_tokens * 100 / context_window_size`; fall back chain: JSON field → `CC_CONTEXT_LIMIT` env → 200K default. Avoid `.context_window.used_percentage` directly — historically lagged.
   - ❌ Bad: `CTX_LIMIT=200000` hardcoded → bar wrong by 5× when user switches to a 1M-context model.
   - ✅ Good: `ctx_size=$(jq -r '.context_window.context_window_size // empty')` then `CTX_LIMIT="${ctx_size:-${CC_CONTEXT_LIMIT:-200000}}"`.
