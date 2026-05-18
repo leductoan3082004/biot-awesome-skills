@@ -20,10 +20,10 @@ This is the single-worker form of the `superpowers:dispatching-parallel-agents` 
 
 - User typed `/checkpoint-save <prompt>` and the args carry an actual task.
 - User asked you to "save state after you finish", "checkpoint when done", or otherwise wrap a normal task with an auto context-save.
+- User typed `/checkpoint-save` with **no args** — treat as "checkpoint the conversation so far, no foreground task." Skip Step 1, jump straight to Step 2. The bg agent still summarizes recent decisions, git state, and remaining work as usual.
 
 **Don't use when:**
 - User asked for `/context-save` alone — call that skill directly, no wrapper needed.
-- Args are empty — ask which task to wrap once, then proceed.
 - The "main task" is itself `/context-save` or another checkpoint variant — collapse to a direct call.
 
 ## Workflow
@@ -44,6 +44,8 @@ digraph workflow {
 ### Step 1 — Execute the main task
 
 Treat the argument string as the user's actual request. Apply the normal output style (Explanatory, terse, whatever is active) for *that task*. Do not announce that a checkpoint is queued. Do not add a "checkpoint will follow" preface. The reader should not be able to tell from the body of the answer that a wrapper was used.
+
+**If args is empty**, skip Step 1 entirely. Do not ask the user for a task. Do not invent one. Go straight to Step 2 — the bg agent captures conversation state, which is exactly what the user wants when they invoke the wrapper bare. In this case the main session emits no foreground text at all; the only output of the entire turn will be the single trailing receipt line from Step 3.
 
 ### Step 2 — Dispatch the background checkpoint agent
 
@@ -97,7 +99,7 @@ Still one line. No retry without user instruction.
 | Stage | Main session action | User-visible output |
 |-------|---------------------|---------------------|
 | Pre   | Parse args as the real task | (none) |
-| Main  | Do the task, normal style   | Full task answer |
+| Main  | Do the task, normal style. **Skip if args empty.** | Full task answer (or nothing if args empty) |
 | Post  | One `Agent(run_in_background: true)` invoking `context-save` | (none) |
 | Done  | Background agent returns "done" | `done checkpoint` (single line) |
 | Fail  | Background agent returns "failed: …" | `checkpoint failed: <reason>` (single line) |
@@ -119,7 +121,7 @@ Still one line. No retry without user instruction.
 | Foreground context-save | Pass `run_in_background: true` to the `Agent` tool. |
 | Long summary at end | One line only: `done checkpoint`. |
 | Checkpoint output mixed into task answer | Keep them separated — full task answer first, then a blank line, then the receipt. |
-| Args empty | Ask once: "which task should the checkpoint wrap?", then proceed. |
+| Args empty | Do **not** ask for a task. Skip Step 1, dispatch the bg agent immediately. Final reply is just the trailing receipt line. |
 | User asked for `/context-save` directly | Skip this skill; call `context-save` directly in the foreground. |
 | Background agent never responds | After 5 minutes from dispatch with no notification, surface `checkpoint failed: bg agent timeout` once; do not auto-retry, do not poll. |
 | Skipping checkpoint because task was trivial | Dispatch is unconditional. Tiny tasks still checkpoint. |
@@ -139,6 +141,7 @@ Still one line. No retry without user instruction.
 - `Agent` call without `run_in_background: true`.
 - Two `Agent` calls — only one bg worker is needed for this wrapper.
 - Skipping the bg dispatch because "task was too small" or "task failed, nothing to save" — dispatch is unconditional.
+- Asking the user "which task should I wrap?" when args is empty — never ask, just dispatch the bg agent. Empty args is a valid invocation.
 - Waiting longer than 5 minutes for the bg notification — surface a single timeout line and move on.
 
 All of these mean: collapse the post-task region down to a single line of either `done checkpoint` or `checkpoint failed: <reason>`.
