@@ -47,7 +47,11 @@ Treat the argument string as the user's actual request. Apply the normal output 
 
 ### Step 2 — Dispatch the background checkpoint agent
 
-After the main task answer has been written (files changed, summary delivered, code committed if requested), call the `Agent` tool exactly once with:
+**Dispatch is unconditional.** Fire the background checkpoint after *every* wrapped invocation, regardless of how trivial the main task was, and regardless of whether the main task succeeded. A failed-mid-task state is often the *most* valuable thing to checkpoint, because that is the state the user will resume from. The wrapper does not decide that the task was "too small" or "too broken" to be worth saving — the user asked for a checkpoint by invoking this skill, and the checkpoint always runs.
+
+If the main task failed mid-execution, deliver whatever partial result + error report you have as the main task answer, then dispatch the bg checkpoint as normal. The bg agent will capture the actual current state (including any partial file changes / dirty git working tree), which is correct.
+
+After the main task answer has been written (files changed, summary delivered, code committed if requested, or partial-failure report posted), call the `Agent` tool exactly once with:
 
 - `subagent_type`: `general-purpose`
 - `run_in_background`: `true`
@@ -70,7 +74,9 @@ This call is fire-and-forget from the main session's point of view. Do not await
 
 ### Step 3 — Quiet notification
 
-The runtime will notify you when the backgrounded agent completes. At that point — and only at that point — append exactly this line to your reply, on its own:
+The runtime will notify you when the backgrounded agent completes. **Wait window: 5 minutes from dispatch.** If no completion notification has arrived by then, treat it as a timeout and surface `checkpoint failed: bg agent timeout` once — do not keep waiting indefinitely, do not poll, do not retry. The runtime delivers the notification when ready; the 5-minute cap exists only so a wedged bg agent does not leave the user hanging without any receipt at all.
+
+If the notification arrives — and only at that point — append exactly this line to your reply, on its own:
 
 ```
 done checkpoint
@@ -115,7 +121,9 @@ Still one line. No retry without user instruction.
 | Checkpoint output mixed into task answer | Keep them separated — full task answer first, then a blank line, then the receipt. |
 | Args empty | Ask once: "which task should the checkpoint wrap?", then proceed. |
 | User asked for `/context-save` directly | Skip this skill; call `context-save` directly in the foreground. |
-| Background agent never responds | If runtime times out the bg agent, surface `checkpoint failed: bg agent timeout` once; do not auto-retry. |
+| Background agent never responds | After 5 minutes from dispatch with no notification, surface `checkpoint failed: bg agent timeout` once; do not auto-retry, do not poll. |
+| Skipping checkpoint because task was trivial | Dispatch is unconditional. Tiny tasks still checkpoint. |
+| Skipping checkpoint because main task failed | Dispatch is unconditional. Failed-state checkpoints are *more* valuable, not less. |
 
 ## Notes on the Background Agent
 
@@ -130,5 +138,7 @@ Still one line. No retry without user instruction.
 - Bullet list summarizing what was saved.
 - `Agent` call without `run_in_background: true`.
 - Two `Agent` calls — only one bg worker is needed for this wrapper.
+- Skipping the bg dispatch because "task was too small" or "task failed, nothing to save" — dispatch is unconditional.
+- Waiting longer than 5 minutes for the bg notification — surface a single timeout line and move on.
 
 All of these mean: collapse the post-task region down to a single line of either `done checkpoint` or `checkpoint failed: <reason>`.
