@@ -219,6 +219,9 @@ These apply at all times, across all tasks:
 
 ## Lessons (universal)
 
+- **Cross-session memory partitions on topic, not branch** — When designing rolling-context / session-memory files, do not use git branch as the partition key. Users branch-hop and commit-hop during normal work; branch-keyed files fragment a single workstream across many files. Partition on inferred topic (goal-derived slug); track `related_branches: [...]` and `related_commits: [...]` as growing lists inside the file. On each save, match the current session to an existing topic file and merge into it; only create a new file when no topic matches.
+  - ❌ Bad: Filename `CURRENT-<branch-slug>.md` → switching from `feat/auth-a` to `feat/auth-b` for the same workstream creates two disjoint files; restore default loads only one and loses half the history.
+  - ✅ Good: Filename `CURRENT-<topic-slug>.md` with frontmatter `related_branches: [feat/auth-a, feat/auth-b]` + `related_commits: [...]`; one consolidated file regardless of how many branches the topic touched.
 - **Background sub-agents have no parent transcript** — A sub-agent dispatched via the agent tool (especially `run_in_background: true`) starts fresh with zero conversation history, so any task framed as "summarize what we just discussed" or "checkpoint our decisions" must be pre-digested by the parent and embedded inline in the sub-agent's prompt; otherwise the sub-agent fabricates, blocks on an interactive prompt it cannot answer, or returns nothing useful.
   - ❌ Bad: `Agent(prompt: "invoke <some-context-save-skill> and capture our recent decisions")` — sub-agent has no transcript and the interactive skill stalls waiting for human input it will never get.
   - ✅ Good: Parent writes a short digest string (decisions, files touched, branch state), embeds it verbatim in the sub-agent's prompt, and instructs the sub-agent to feed those exact strings into the downstream skill's prompts.
