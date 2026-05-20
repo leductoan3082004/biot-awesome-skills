@@ -16,7 +16,7 @@ Claude-specific layer on top of the vendor-neutral baseline. The baseline is aut
 - **Trust-but-verify** — Never trust a sub-agent response immediately. Treat every answer as a draft until independently validated.
 - **`/browse` for all web browsing** — gstack's `/browse` skill replaces `mcp__claude-in-chrome__*` tools. Never invoke the Chrome MCP tools directly.
 - **Hook + rule edits sync to biot** — See preamble.
-- **Authorship + verification + 5 non-negotiables + save trigger + one-feature-at-a-time + completion-discipline** inherit from `AGENTS.md` always-on rules — apply them too.
+- **Authorship + verification + 5 non-negotiables + save trigger + one-feature-at-a-time + completion-discipline + clean-session-state** inherit from `AGENTS.md` always-on rules — apply them too.
 
 ---
 
@@ -42,5 +42,6 @@ Pulled in via `@AGENTS.md` above. The high-priority ones restated for visibility
 - **Verification gate**: task incomplete until tests pass, build succeeds, runtime behavior matches expectations, lint/type-check is clean.
 - **One feature at a time**: finish + e2e verify feature A before starting feature B; no opportunistic refactors mid-feature.
 - **Completion discipline**: verify done with evidence (structure → behavior → e2e), report changed/verified/passed/unverified — full rules: `~/.claude/instructions/completion-discipline.md`.
+- **Clean session state**: 5-dim exit check (verification + tests/checks + progress + artifacts + startup path); emit Clean State Exit Report at end — full rules: `~/.claude/instructions/clean-session-state.md`.
 
 For full text of any of these, see `~/.claude/instructions/commit-policy.md`, `~/.claude/instructions/engineering-discipline.md`, or `~/.claude/instructions/context-save.md` via the `AGENTS.md` routing table.

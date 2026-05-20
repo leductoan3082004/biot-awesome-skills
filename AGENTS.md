@@ -13,6 +13,7 @@ Keep this router short. If you find yourself typing vendor-specific terms (`Opus
 - **Save trigger** — Invoke `/context-save` before the final response after substantive work (code edit / decision / fix / refactor / finding). Skip for trivial replies, clarifying questions, read-only exploration. When in doubt → skip.
 - **Verification gate** — Task is incomplete until tests pass, build succeeds, runtime behavior matches expectations, lint/type-check is clean. "Seems right" is never sufficient.
 - **Completion discipline** — Verify with evidence before declaring done: structure → behavior → end-to-end path. Report what you changed, what you verified, what passed, what remains unverified. Full rules: `~/.claude/instructions/completion-discipline.md`.
+- **Clean session state** — Session not done until 5-dim Clean State Exit Check passes: verification + tests/checks + progress recorded + artifacts cleaned + startup path works. Emit Clean State Exit Report at session end. Full rules: `~/.claude/instructions/clean-session-state.md`.
 - **Process over prose** — Pick the workflow / skill that matches the task. Follow steps in order. Hit every checkpoint.
 - **One feature at a time** — Finish + end-to-end verify feature A before starting feature B. No opportunistic "also refactor" of unrelated code mid-feature.
 
@@ -28,4 +29,5 @@ Read these files **before acting** in the relevant scope.
 | PR creation policy (template handling, accuracy rules, examples) | `~/.claude/instructions/pr-policy.md` | Opening or updating a PR |
 | Engineering discipline (anti-rationalization table, process-over-prose, verification, progressive disclosure, 5 non-negotiables expanded) | `~/.claude/instructions/engineering-discipline.md` | Starting non-trivial work — read once per session |
 | Completion discipline (verification checklist, definition of done, completion-report shape) | `~/.claude/instructions/completion-discipline.md` | Before declaring any task complete |
+| Clean session state (5-dim exit check, exit-report template, completion gate) | `~/.claude/instructions/clean-session-state.md` | Before ending a session or marking a task complete |
 | Context save policy (full trigger criteria, v3 layout, restore flow) | `~/.claude/instructions/context-save.md` | Before invoking `/context-save` |
