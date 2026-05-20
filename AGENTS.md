@@ -217,8 +217,81 @@ These apply at all times, across all tasks:
 
 ---
 
+## 4. Context save policy
+
+After every meaningful unit of work this turn, invoke
+`/context-save-rolling` **before your final response**. Binding rule —
+not advisory.
+
+**A "meaningful unit of work" is any of:**
+- a code edit, write, or new file landed
+- an architectural / design / scope decision made or reversed
+- a bug reproduced, root-caused, or fixed
+- a refactor phase completed
+- an investigation or research thread closed with concrete findings
+- a working patch produced
+- behavior validated with tests, commands, or runtime observation
+- a clear stopping point before switching tasks
+- an important constraint, blocker, or hidden cost discovered
+
+If **any** of those happened this turn, save.
+
+**Do NOT save for:**
+- clarifying questions back to the user
+- confirmation requests before doing something
+- trivial replies (single fact, short answer, status check)
+- read-only exploration with no conclusions yet
+- a follow-up tweak to work already saved earlier this session
+
+When in doubt, lean toward **skipping**. Over-saving creates noise.
+Missing one save is recoverable from git + memory; mis-saving every
+turn poisons the snapshot store with churn.
+
+**Layout (v3, topic-snapshot folders):**
+```
+~/.gstack/projects/<slug>/checkpoints/
+  YYYY-MM-DD_HHMMSS-<topic-slug>/
+    context.md          # ≤500 lines, routing + summary
+    DECISIONS.md        # full decision log (carry-forward + new)
+    PROGRESS.md         # done / in-progress / open / blocked + session log
+    RESULTS.md          # test outputs, validations, command results
+    artifacts/          # optional: logs/ patches/ research/ snapshots/
+```
+
+Each save creates a NEW timestamped snapshot folder. The skill matches
+the current session to an existing topic automatically (across
+branches and commits) and carries forward decisions / progress /
+results / notes verbatim. Restore picks the latest folder per topic.
+
+**How to save:** invoke the `/context-save-rolling` skill. Topic
+match is automatic; if the match is genuinely ambiguous the skill
+will AskUserQuestion. Otherwise it merges silently.
+
+**How to resume:** invoke `/context-restore-rolling`. It scores
+candidate topics against the current task signal (summary +
+keywords + branch + recency), auto-loads when the winner is clear,
+and AskUserQuestions when ambiguous. Sibling files (DECISIONS /
+PROGRESS / RESULTS / artifacts) are lazy-loaded only after you opt
+in — `context.md` alone is read by default.
+
+Legacy `/context-save` (gstack single-file) and v2 rolling
+`CURRENT-<topic-slug>.md` files are still readable by restore as
+fallbacks; new saves always write the v3 folder layout. Legacy files
+are never deleted by the save flow.
+
+---
+
 ## Lessons (universal)
 
+- **Do not end on vague uncertainty** — When the task is to clarify a confusing issue, keep investigating until each unknown is either resolved or named with the exact evidence needed next.
+  - ❌ Bad: "This might be caused by `<some-helper>`; needs more investigation."
+  - ✅ Good: "`<some-helper>` is confirmed by `<source-evidence>`; remaining unknown is `<missing-fact>`, which requires `<specific-next-check>`."
+- **Separate requirement from implementation guardrail** — When explaining a spec review, state what the source explicitly requires, then separately label any conservative implementation guardrail or illustrative pseudocode.
+  - ❌ Bad: "`<feature-x>` requires wildcarding every `<related-value>` because the doc sketch shows it."
+  - ✅ Good: "`<feature-x>` requires protecting `<sensitive-value>`; wildcarding `<related-values>` is a conservative guardrail until the discriminator is verified."
+- **Skip legacy permission gaps unless the new change expands exposure** — When reviewing a permission split or new gate, treat pre-existing surfaces that were never guarded by the old permission as out of scope unless the change adds newly protected data there or changes their access path.
+  - ❌ Bad: "`<legacy-output>` was not gated by `<old-permission>`, so the new `<new-permission>` ticket must fix it."
+  - ✅ Good: "`<legacy-output>` was already outside `<old-permission>`; skip it unless `<feature-x>` now writes protected data there or routes users through it."
 - **Cross-session memory partitions on topic, not branch** — When designing rolling-context / session-memory files, do not use git branch as the partition key. Users branch-hop and commit-hop during normal work; branch-keyed files fragment a single workstream across many files. Partition on inferred topic (goal-derived slug); track `related_branches: [...]` and `related_commits: [...]` as growing lists inside the file. On each save, match the current session to an existing topic file and merge into it; only create a new file when no topic matches.
   - ❌ Bad: Filename `CURRENT-<branch-slug>.md` → switching from `feat/auth-a` to `feat/auth-b` for the same workstream creates two disjoint files; restore default loads only one and loses half the history.
   - ✅ Good: Filename `CURRENT-<topic-slug>.md` with frontmatter `related_branches: [feat/auth-a, feat/auth-b]` + `related_commits: [...]`; one consolidated file regardless of how many branches the topic touched.
