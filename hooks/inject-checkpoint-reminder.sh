@@ -20,7 +20,7 @@ work happened:
   - clear stopping point before switching tasks
 
 If YES → invoke /context-save BEFORE your final response.
-  Writes ~/.gstack/projects/<slug>/checkpoints/YYYY-MM-DD_HHMMSS-<topic>/
+  Writes ~/.claude/projects/checkpoints/YYYY-MM-DD_HHMMSS-<topic>/
   containing context.md + DECISIONS.md + PROGRESS.md + RESULTS.md +
   optional artifacts/. Topic-match auto-merges into the existing
   workstream across branches/commits; ambiguous matches AskUserQuestion.

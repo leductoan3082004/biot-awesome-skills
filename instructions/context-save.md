@@ -32,8 +32,11 @@ Missing one save is recoverable from git + memory; mis-saving every
 turn poisons the snapshot store with churn.
 
 **Layout (v3, topic-snapshot folders):**
+
+Single global checkpoint dir — no per-project segregation.
+
 ```
-~/.gstack/projects/<slug>/checkpoints/
+~/.claude/projects/checkpoints/
   YYYY-MM-DD_HHMMSS-<topic-slug>/
     context.md          # ≤500 lines, routing + summary
     DECISIONS.md        # full decision log (carry-forward + new)

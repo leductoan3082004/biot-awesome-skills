@@ -56,13 +56,18 @@ the chosen snapshot; load `DECISIONS.md` / `PROGRESS.md` /
 
 ### Step 1: Resolve paths
 
+`CHECKPOINT_DIR` is the single global checkpoint dir — same path for
+every project. `SLUG` is captured as informational metadata only (lets
+the agent show "you appear to be in working dir X" alongside results)
+and does NOT scope the search.
+
 ```bash
+CHECKPOINT_DIR=~/.claude/projects/checkpoints
 eval "$(~/.claude/skills/gstack/bin/gstack-slug 2>/dev/null)" 2>/dev/null || SLUG=$(basename "$PWD")
-CHECKPOINT_DIR=~/.gstack/projects/$SLUG/checkpoints
 CURRENT_BRANCH=$(git rev-parse --abbrev-ref HEAD 2>/dev/null || echo "")
 HEAD_COMMIT=$(git rev-parse --short HEAD 2>/dev/null || echo "")
-echo "SLUG=$SLUG"
-echo "CHECKPOINT_DIR=$CHECKPOINT_DIR"
+echo "CHECKPOINT_DIR=$CHECKPOINT_DIR  # global, all projects"
+echo "SLUG=$SLUG  # informational only"
 echo "CURRENT_BRANCH=$CURRENT_BRANCH"
 echo "HEAD_COMMIT=$HEAD_COMMIT"
 ```

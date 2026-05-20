@@ -57,8 +57,13 @@ latest folder per topic.
 
 ## Folder layout (canonical)
 
+**Single global checkpoint dir.** All topic snapshots from all projects /
+working directories live side-by-side under one path — no per-project
+segregation. Topic-slug uniqueness is the agent's responsibility (pick
+slugs descriptive enough to not collide across unrelated workstreams).
+
 ```
-~/.gstack/projects/<slug>/checkpoints/
+~/.claude/projects/checkpoints/
   2026-05-20_143022-auth-middleware-refactor/
     context.md          # routing + summary, ≤500 lines
     DECISIONS.md        # full decision log (carry-forward + new)
@@ -96,7 +101,7 @@ keywords: [<3-7 routing tokens>]          # primary noun, sub-feature, verb of i
 created: <ISO-8601, snapshot folder creation>
 last_updated: <ISO-8601, same as created on new snapshot>
 session_number: <N>                       # parent.session_number + 1, or 1 if new topic
-project_slug: <gstack project slug>
+project_slug: <informational only — origin working dir slug; not used for routing>
 repo_path: <absolute path to repo>
 current_branch: <branch or empty>
 head_commit: <7-char commit or empty>
@@ -248,19 +253,23 @@ the sibling `.md` files so it's discoverable.
 
 ### Step 1: Resolve paths + gather state
 
+`CHECKPOINT_DIR` is fixed and global — same path for every project. `SLUG`
+is still captured as informational metadata (origin working dir) but is
+NOT part of the storage path.
+
 ```bash
-eval "$(~/.claude/skills/gstack/bin/gstack-slug 2>/dev/null)" 2>/dev/null || SLUG=$(basename "$PWD")
-CHECKPOINT_DIR=~/.gstack/projects/$SLUG/checkpoints
+CHECKPOINT_DIR=~/.claude/projects/checkpoints
 mkdir -p "$CHECKPOINT_DIR"
 
+eval "$(~/.claude/skills/gstack/bin/gstack-slug 2>/dev/null)" 2>/dev/null || SLUG=$(basename "$PWD")
 CURRENT_BRANCH=$(git rev-parse --abbrev-ref HEAD 2>/dev/null || echo "")
 HEAD_COMMIT=$(git rev-parse --short HEAD 2>/dev/null || echo "")
 NOW_ISO=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
 NOW_FOLDER=$(date +"%Y-%m-%d_%H%M%S")
 REPO_PATH=$(pwd -P)
 
-echo "SLUG=$SLUG"
-echo "CHECKPOINT_DIR=$CHECKPOINT_DIR"
+echo "CHECKPOINT_DIR=$CHECKPOINT_DIR  # global, shared across all projects"
+echo "SLUG=$SLUG  # informational only"
 echo "CURRENT_BRANCH=$CURRENT_BRANCH"
 echo "HEAD_COMMIT=$HEAD_COMMIT"
 echo "NOW_ISO=$NOW_ISO"
@@ -453,7 +462,7 @@ Compose frontmatter from:
 - `created` = `$NOW_ISO` (snapshot folder creation; identical across siblings inside this folder)
 - `last_updated` = `$NOW_ISO`
 - `session_number` = parent.session_number + 1, or 1 if new
-- `project_slug` = `$SLUG`
+- `project_slug` = `$SLUG` (informational metadata; not used for storage path)
 - `repo_path` = `$REPO_PATH`
 - `current_branch` = `$CURRENT_BRANCH`
 - `head_commit` = `$HEAD_COMMIT`
