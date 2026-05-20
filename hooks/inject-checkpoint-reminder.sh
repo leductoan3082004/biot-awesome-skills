@@ -1,41 +1,39 @@
 #!/bin/bash
-# UserPromptSubmit hook: nudge the agent to run /context-save after substantive turns.
+# UserPromptSubmit hook: nudge the agent to run /context-save-rolling
+# after substantive turns. Authoritative policy lives in
+# ~/.claude/CLAUDE.md § "Context save policy".
 #
-# Stdout from this hook is appended to the model's context for the current turn.
-# The text is guidance, not enforcement — the model judges whether the turn
-# warrants saving. See ~/.claude/CLAUDE.md for hook policy.
+# Stdout from this hook is appended to the model's context for the
+# current turn. The text is a per-turn reminder, not enforcement.
 
 cat <<'EOF'
-[context-save policy]
-After completing the user's task this turn, judge whether substantive work happened:
+[context-save policy reminder — full rules in ~/.claude/CLAUDE.md § "Context save policy"]
+
+After completing the user's task this turn, judge whether SUBSTANTIVE
+work happened:
   - code edits / writes / new files
   - completed multi-step investigation with concrete findings
   - decisions reached or plans finalized
   - bugs reproduced / root-caused / fixed
   - non-trivial refactors, migrations, configuration changes
+  - validated behavior with tests or commands
+  - clear stopping point before switching tasks
 
-If YES → invoke the /context-save-rolling skill before your final response.
-It writes a topic-keyed living file to
-~/.gstack/projects/<slug>/checkpoints/CURRENT-<topic-slug>.md and merges
-into the matching topic instead of creating a fresh file per session.
-Branch and commit are recorded inside the file (related_branches / related_commits
-lists), so branch-hopping during the same workstream stays in one file.
-A timestamped audit snapshot is also written alongside.
+If YES → invoke /context-save-rolling BEFORE your final response.
+  Writes ~/.gstack/projects/<slug>/checkpoints/YYYY-MM-DD_HHMMSS-<topic>/
+  containing context.md + DECISIONS.md + PROGRESS.md + RESULTS.md +
+  optional artifacts/. Topic-match auto-merges into the existing
+  workstream across branches/commits; ambiguous matches AskUserQuestion.
 
-The skill performs topic-match automatically — do NOT skip its Step 4
-(topic-match decision). When the topic match is genuinely ambiguous it
-will ask via AskUserQuestion; otherwise it merges silently.
-
-If NO → do NOT invoke /context-save-rolling. Skip it when this turn is:
+If NO → SKIP /context-save-rolling. Skip when this turn is:
   - a clarifying question back to the user
   - a confirmation request before doing something
   - a trivial reply (single fact, short answer, status check)
   - read-only exploration with no conclusions yet
-  - a follow-up tweak to work that was already saved this session
+  - a follow-up tweak to work already saved earlier this session
 
-When in doubt, lean toward skipping — over-saving creates noise.
+When in doubt → lean toward skipping. Over-saving creates noise.
 
-Note: the legacy gstack /context-save skill (single-file CONTEXT.md) is
-still installed but deprecated for this user. Prefer /context-save-rolling.
-Restore with /context-restore-rolling.
+Restore with /context-restore-rolling (frontmatter-routes to best
+match; asks when ambiguous; lazy-loads siblings).
 EOF
