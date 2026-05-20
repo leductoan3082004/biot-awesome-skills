@@ -220,7 +220,7 @@ These apply at all times, across all tasks:
 ## 4. Context save policy
 
 After every meaningful unit of work this turn, invoke
-`/context-save-rolling` **before your final response**. Binding rule —
+`/context-save` **before your final response**. Binding rule —
 not advisory.
 
 **A "meaningful unit of work" is any of:**
@@ -263,18 +263,18 @@ the current session to an existing topic automatically (across
 branches and commits) and carries forward decisions / progress /
 results / notes verbatim. Restore picks the latest folder per topic.
 
-**How to save:** invoke the `/context-save-rolling` skill. Topic
+**How to save:** invoke the `/context-save` skill. Topic
 match is automatic; if the match is genuinely ambiguous the skill
 will AskUserQuestion. Otherwise it merges silently.
 
-**How to resume:** invoke `/context-restore-rolling`. It scores
+**How to resume:** invoke `/context-restore`. It scores
 candidate topics against the current task signal (summary +
 keywords + branch + recency), auto-loads when the winner is clear,
 and AskUserQuestions when ambiguous. Sibling files (DECISIONS /
 PROGRESS / RESULTS / artifacts) are lazy-loaded only after you opt
 in — `context.md` alone is read by default.
 
-Legacy `/context-save` (gstack single-file) and v2 rolling
+Legacy single-file gstack checkpoint audits and v2 rolling
 `CURRENT-<topic-slug>.md` files are still readable by restore as
 fallbacks; new saves always write the v3 folder layout. Legacy files
 are never deleted by the save flow.

@@ -6,12 +6,15 @@
 # next turn resumes the same workstream.
 #
 # Lookup order (first match wins):
-#   1. Topic-keyed rolling checkpoints (preferred):
+#   1. v3 topic-snapshot folder (current /context-save layout):
+#      ~/.gstack/projects/<slug>/checkpoints/YYYY-MM-DD_HHMMSS-<topic-slug>/context.md
+#      → pick the folder whose name sorts highest (newest timestamp).
+#   2. v2 topic-keyed file (rolling-v2 layout):
 #      ~/.gstack/projects/<slug>/checkpoints/CURRENT-<topic-slug>.md
 #      → pick the file with the latest mtime.
-#   2. Legacy single-file checkpoint (gstack /context-save):
+#   3. Legacy single-file checkpoint (legacy gstack format):
 #      ~/.gstack/projects/<slug>/CONTEXT.md
-#   3. Legacy timestamped snapshots (gstack /context-save older format):
+#   4. Legacy timestamped snapshots (older gstack format):
 #      ~/.gstack/projects/<slug>/checkpoints/20YYMMDD-HHMMSS-*.md
 #      → pick the newest by filename sort.
 #
@@ -40,8 +43,18 @@ CHECKPOINT_DIR="$PROJECT_DIR/checkpoints"
 CONTEXT_FILE=""
 SOURCE_LABEL=""
 
-# 1) Topic-keyed rolling checkpoint: pick newest CURRENT-*.md by mtime.
+# 1) v3 topic-snapshot folder: pick newest by folder-name sort (timestamp prefix).
 if [ -d "$CHECKPOINT_DIR" ]; then
+  NEWEST_V3=$(find "$CHECKPOINT_DIR" -mindepth 1 -maxdepth 1 -type d -name "20*-*" 2>/dev/null \
+    | sort -r | head -1)
+  if [ -n "$NEWEST_V3" ] && [ -f "$NEWEST_V3/context.md" ] && [ -r "$NEWEST_V3/context.md" ]; then
+    CONTEXT_FILE="$NEWEST_V3/context.md"
+    SOURCE_LABEL="/context-save v3 topic-snapshot folder"
+  fi
+fi
+
+# 2) v2 topic-keyed file: pick newest CURRENT-*.md by mtime.
+if [ -z "$CONTEXT_FILE" ] && [ -d "$CHECKPOINT_DIR" ]; then
   NEWEST_ROLLING=$(find "$CHECKPOINT_DIR" -maxdepth 1 -name "CURRENT-*.md" -type f \
     -exec stat -f '%m %N' {} \; 2>/dev/null \
     | sort -nr | head -1 | cut -d' ' -f2-)
@@ -53,26 +66,26 @@ if [ -d "$CHECKPOINT_DIR" ]; then
   fi
   if [ -n "$NEWEST_ROLLING" ] && [ -r "$NEWEST_ROLLING" ]; then
     CONTEXT_FILE="$NEWEST_ROLLING"
-    SOURCE_LABEL="/context-save-rolling (topic-keyed)"
+    SOURCE_LABEL="legacy v2 topic-keyed file"
   fi
 fi
 
-# 2) Legacy single-file CONTEXT.md.
+# 3) Legacy single-file CONTEXT.md.
 if [ -z "$CONTEXT_FILE" ]; then
   LEGACY_SINGLE="$PROJECT_DIR/CONTEXT.md"
   if [ -f "$LEGACY_SINGLE" ] && [ -r "$LEGACY_SINGLE" ]; then
     CONTEXT_FILE="$LEGACY_SINGLE"
-    SOURCE_LABEL="gstack /context-save (legacy single-file)"
+    SOURCE_LABEL="legacy single-file checkpoint"
   fi
 fi
 
-# 3) Legacy timestamped snapshots.
+# 4) Legacy timestamped snapshots.
 if [ -z "$CONTEXT_FILE" ] && [ -d "$CHECKPOINT_DIR" ]; then
   NEWEST_LEGACY=$(find "$CHECKPOINT_DIR" -maxdepth 1 -name "20*.md" -type f 2>/dev/null \
     | sort -r | head -1)
   if [ -n "$NEWEST_LEGACY" ] && [ -r "$NEWEST_LEGACY" ]; then
     CONTEXT_FILE="$NEWEST_LEGACY"
-    SOURCE_LABEL="gstack /context-save (legacy timestamped audit snapshot)"
+    SOURCE_LABEL="legacy timestamped audit snapshot"
   fi
 fi
 
@@ -94,8 +107,8 @@ not start from a clean slate. If the user immediately asks something
 unrelated, abandon this context; otherwise resume.
 
 If you need to switch topics or load a different rolling checkpoint, use
-\`/context-restore-rolling list\` to see all topic files, or
-\`/context-restore-rolling <topic-fragment>\` to pick a specific one.
+\`/context-restore list\` to see all topic files, or
+\`/context-restore <topic-fragment>\` to pick a specific one.
 
 ---
 

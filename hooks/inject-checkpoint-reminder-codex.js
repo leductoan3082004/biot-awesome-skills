@@ -20,13 +20,13 @@ work happened:
   - validated behavior with tests or commands
   - clear stopping point before switching tasks
 
-If YES -> invoke /context-save-rolling BEFORE your final response.
+If YES -> invoke /context-save BEFORE your final response.
   Writes ~/.gstack/projects/<slug>/checkpoints/YYYY-MM-DD_HHMMSS-<topic>/
   containing context.md + DECISIONS.md + PROGRESS.md + RESULTS.md +
   optional artifacts/. Topic-match auto-merges into the existing
   workstream across branches/commits; ambiguous matches AskUserQuestion.
 
-If NO -> SKIP /context-save-rolling. Skip when this turn is:
+If NO -> SKIP /context-save. Skip when this turn is:
   - a clarifying question back to the user
   - a confirmation request before doing something
   - a trivial reply (single fact, short answer, status check)
@@ -35,7 +35,7 @@ If NO -> SKIP /context-save-rolling. Skip when this turn is:
 
 When in doubt -> lean toward skipping. Over-saving creates noise.
 
-Restore with /context-restore-rolling (frontmatter-routes to best
+Restore with /context-restore (frontmatter-routes to best
 match; asks when ambiguous; lazy-loads siblings).`;
 
 process.stdout.write(JSON.stringify({
