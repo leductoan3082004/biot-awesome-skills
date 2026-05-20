@@ -1,292 +1,673 @@
 ---
 name: context-save
-description: Use when user wants to checkpoint or persist the current Claude Code session state to disk so it can be resumed later — same session, new session, or different machine. Triggers on "save context", "checkpoint this", "remember where we are", "snapshot the session", "save my progress", "/context-save", or before known interruption points (switching branches, ending session, switching tasks). Captures branch, commits, uncommitted diff, decisions, investigation findings, open questions, and mental model. Stores under ~/.claude/contexts/<repo-slug>/ — never writes inside the working repo. The saved file is exhaustive by design — required fields are required, no shortcuts.
+description: |
+  Use when the user has finished a meaningful unit of work (code edit,
+  decision, bug fix, completed investigation, validated behavior,
+  refactor phase, stopping point before a switch, discovered blocker)
+  AND you need to persist a structured snapshot a future agent can
+  resume from. Also use when the user says "save progress", "save
+  state", "save my work", "context save", or "/context-save".
+  Writes a timestamped snapshot folder (v3 layout) with sibling files
+  for context / decisions / progress / results / optional artifacts.
+  Topic identity carries across branches and commits.
+allowed-tools:
+  - Bash
+  - Read
+  - Write
+  - Edit
+  - Glob
+  - Grep
+  - AskUserQuestion
 ---
 
-# context-save
+# /context-save — Structured Topic-Snapshot Save (v3)
 
-Persist enough of the current session state that a future session — same person or different agent — can resume the work without re-doing investigation, re-asking the user, or re-discovering decisions.
+You are a Staff Engineer producing a structured, machine-friendly
+snapshot of the current workstream. **One folder per save.** Sibling
+files separate distinct concerns. The whole snapshot is self-contained
+so a fresh agent can route to it and resume work without loss.
 
-**Core principle:** A save is a contract with future-you. If a required field is empty, the contract is broken — the resume will fail in subtle ways that look like progress.
+**HARD GATE:** No code changes. Snapshot only.
 
-**HARD GATE — Capture-only.** This skill writes ONE file under `~/.claude/contexts/` and reads git state. It does NOT modify project code, does NOT run `git add` / `git commit` / `git push` / `git stash`, does NOT mutate the working tree. If the user wants to commit alongside saving, that is a separate operation they must request explicitly — never bundle it.
+**HARD GATE:** Do NOT skip topic-match (Step 4). Creating a new
+snapshot folder without first checking whether the current session
+continues an existing topic fragments the same workstream across
+multiple topic slugs — the failure this skill exists to prevent.
 
-**Iron rule:** Never write inside the working repo. Saves go to `~/.claude/contexts/<repo-slug>/`. This isolates session memory from project history, survives branch switches, survives clones, and avoids polluting the user's PRs with planning artifacts.
+**HARD GATE:** Every snapshot is self-contained. All files belonging
+to a snapshot live INSIDE its folder. Never write snapshot material
+outside its folder.
 
-## Storage Location
+---
+
+## What changed vs prior versions
+
+| Era | Layout | Why obsolete |
+|-----|--------|--------------|
+| gstack `/context-save` | one timestamped `.md` per save | restore loaded newest; older saves lost |
+| rolling v1 (branch-keyed) | `CURRENT-<branch>.md` | branch-hopping fragmented the workstream |
+| rolling v2 (topic-keyed file) | `CURRENT-<topic>.md` | one giant file; no decision/progress/results separation; no per-save history |
+| **rolling v3 — this version** | `YYYY-MM-DD_HHMMSS-<topic-slug>/{context.md, DECISIONS.md, PROGRESS.md, RESULTS.md, artifacts/}` | per-save snapshot folders; structured siblings; full history preserved as separate folders; fast routing via `context.md` frontmatter |
+
+Each save creates a NEW timestamped folder. The folder name embeds
+the topic slug. Restore groups folders by topic slug and picks the
+latest folder per topic.
+
+---
+
+## Folder layout (canonical)
 
 ```
-~/.claude/contexts/<repo-slug>/<timestamp>-<short-topic>.md
+~/.gstack/projects/<slug>/checkpoints/
+  2026-05-20_143022-auth-middleware-refactor/
+    context.md          # routing + summary, ≤500 lines
+    DECISIONS.md        # full decision log (carry-forward + new)
+    PROGRESS.md         # done / in-progress / open / blocked + session log
+    RESULTS.md          # test outputs, validations, command results
+    artifacts/          # OPTIONAL, free-form
+      logs/             # long command outputs
+      patches/          # diffs/intermediate patches
+      research/         # external research, saved web pages
+      snapshots/        # screenshots, design mocks
 ```
 
-- `<repo-slug>` = absolute path of the repo with `/` → `-`, leading `-` stripped.
-  Example: `/Users/toale/Developer/iris` → `Users-toale-Developer-iris`
-- `<timestamp>` = `YYYY-MM-DD-HHMM` in local time
-- `<short-topic>` = 2-5 word kebab-case slug, sanitised per the **Title Sanitisation** section below
+## Folder naming
 
-Compute repo slug from `git rev-parse --show-toplevel`. If the user is not in a git repo, use the cwd absolute path with the same transformation, and note this in the save's frontmatter.
+`YYYY-MM-DD_HHMMSS-<topic-slug>`
 
-`mkdir -p` the directory. The directory lives in `~/.claude/`, never in the repo. This is non-negotiable — see Red Flags.
+- ISO date prefix → chronologically sortable with plain `ls -r`
+- Underscore separator → parseable with `cut -d_`
+- `<topic-slug>`: lowercase, alnum + hyphen only, ≤60 chars
+- Same topic across multiple saves → same slug, different timestamp prefixes
 
-## Title Sanitisation (security boundary)
+Robustness:
+- Repeated saves of the same topic create new sibling folders. The folder name conflict is impossible at second-resolution unless two saves fire in the same second — collision-safe suffix appended if so.
+- Old snapshots are NEVER overwritten or deleted; the latest snapshot is the "current state" but every prior snapshot remains queryable.
 
-User-supplied titles are **untrusted input**. They may contain shell metacharacters (`"`, `;`, `$`, `` ` ``, spaces, newlines, glob chars) that could corrupt subsequent commands if interpolated unsafely. The filename slug MUST be computed in bash with an allowlist — never in the LLM layer by string concatenation.
+## `context.md` — frontmatter (mandatory)
 
-Even if you (the LLM) "auto-derive" a slug from conversation context, still run the allowlist sanitiser before constructing the path.
+```yaml
+---
+schema: context-save/v3
+topic: <topic-slug>                       # stable identity across snapshots
+title: <stable human title>               # changes only on workstream pivot
+summary: "<single line ≤200 chars; what this workstream is about; restore scans this line>"
+keywords: [<3-7 routing tokens>]          # primary noun, sub-feature, verb of intent
+created: <ISO-8601, snapshot folder creation>
+last_updated: <ISO-8601, same as created on new snapshot>
+session_number: <N>                       # parent.session_number + 1, or 1 if new topic
+project_slug: <gstack project slug>
+repo_path: <absolute path to repo>
+current_branch: <branch or empty>
+head_commit: <7-char commit or empty>
+related_branches: [<union from parent + current>]
+related_commits: [<union from parent + current, cap last 50>]
+parent_snapshot: <folder basename of prior snapshot, or empty>
+status: in-progress | resolved | abandoned
+---
+```
+
+## `context.md` — body (mandatory, ≤500 lines)
+
+Fixed section order. The body must stay under 500 lines; push detail
+into siblings if it grows.
+
+```markdown
+# <title>
+
+> **Summary:** <verbatim mirror of frontmatter summary>
+
+## Topic identity
+<1-3 sentences: what this workstream is about, why it exists, definition of done>
+
+## Quick state
+- Branch: <current_branch>
+- Commit: <head_commit>
+- Session: <N>
+- Status: <in-progress | resolved | abandoned>
+- Last updated: <last_updated>
+
+## What's in this snapshot
+- `DECISIONS.md` — <count> decisions
+- `PROGRESS.md` — <X done / Y open / Z blocked>
+- `RESULTS.md` — <K validation entries>
+- `artifacts/` — <present | empty>
+
+## Active decisions (top 5)
+- <one-line decision> — *(session K)*
+- ...
+*(See `DECISIONS.md` for the full log including superseded ones.)*
+
+## Open work (top 5)
+- <one-line item> — *(opened session J)*
+- ...
+*(See `PROGRESS.md` for the full backlog.)*
+
+## Recently resolved (top 5)
+- ~~<item>~~ `[done session K]` — <date>
+- ...
+
+## Notable gotchas / constraints
+- <one-line gotcha future-you needs before resuming>
+- ...
+
+## How to resume
+1. <concrete next action>
+2. <concrete next action>
+3. ...
+
+## Routing hints
+- **Matches if your task involves:** <comma list from keywords + summary>
+- **Does NOT match if your task involves:** <one-line anti-keywords>
+- **Adjacent topics:** <folder names of related snapshots, or "none">
+```
+
+`context.md` is **for routing + orientation**, not exhaustive detail.
+Hard cap: **500 lines**. Step 7c enforces it.
+
+## `DECISIONS.md`
+
+```markdown
+# Decisions — <title>
+
+## Session <N> (<date>)
+- <new decision>. **Why:** <reason>. **Tradeoff:** <what we gave up>.
+- ~~<old decision>~~ → <replacement>. Superseded this session because <reason>.
+
+## Session <N-1> (<date>)
+- <prior decision> ... (carried forward verbatim from parent)
+```
+
+Newest session first. Carry-forward verbatim from parent; supersession
+marks decisions with strike-through, never deletes.
+
+## `PROGRESS.md`
+
+```markdown
+# Progress — <title>
+
+## Done
+- `[done session K, <date>]` <item>
+
+## In progress
+- <item> — started session J
+
+## Open / next steps
+- <item> — opened session J
+
+## Blocked
+- <item> — blocker: <reason>, since session K
+
+## Session log
+
+| # | Date       | Branch    | Commit | One-line summary             |
+|---|------------|-----------|--------|------------------------------|
+| N | YYYY-MM-DD | <branch>  | <sha>  | <this session>               |
+| ...prior rows preserved from parent...                              |
+```
+
+## `RESULTS.md`
+
+```markdown
+# Results — <title>
+
+## Session <N> (<date>)
+
+### <validation name>
+- Command: `<exact command>`
+- Output (head):
+  ```
+  <≤20 lines>
+  ```
+- Verdict: pass | fail | inconclusive
+- Full output: `artifacts/logs/<filename>` (if long)
+
+## Session <N-1> (<date>)
+... (carried forward)
+```
+
+## `artifacts/` (optional)
+
+Free-form. Use when content is too long, too binary, or too specialized
+for inline. Common subfolders: `logs/`, `patches/`, `research/`,
+`snapshots/`. Everything inside `artifacts/` is referenced from one of
+the sibling `.md` files so it's discoverable.
+
+---
+
+## Detect command
+
+- `/context-save` or `/context-save <title>` → **Save**
+- `/context-save list` → **List snapshot folders grouped by topic**
+- `/context-save merge <topic-a> <topic-b>` → **Manual topic merge** (when two slugs cover the same workstream)
+- `/context-save resume` or `restore` → tell user "Use `/context-restore`". Exit.
+
+---
+
+## Save flow
+
+### Step 1: Resolve paths + gather state
 
 ```bash
-# Pass the raw title via env var; never interpolate it into a command string.
-RAW="${USER_TITLE:-untitled}"
-TITLE_SLUG=$(printf '%s' "$RAW" \
-  | tr '[:upper:]' '[:lower:]' \
-  | tr -s ' \t\n' '-' \
-  | tr -cd 'a-z0-9.-' \
-  | cut -c1-60)
-TITLE_SLUG="${TITLE_SLUG:-untitled}"
+eval "$(~/.claude/skills/gstack/bin/gstack-slug 2>/dev/null)" 2>/dev/null || SLUG=$(basename "$PWD")
+CHECKPOINT_DIR=~/.gstack/projects/$SLUG/checkpoints
+mkdir -p "$CHECKPOINT_DIR"
+
+CURRENT_BRANCH=$(git rev-parse --abbrev-ref HEAD 2>/dev/null || echo "")
+HEAD_COMMIT=$(git rev-parse --short HEAD 2>/dev/null || echo "")
+NOW_ISO=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
+NOW_FOLDER=$(date +"%Y-%m-%d_%H%M%S")
+REPO_PATH=$(pwd -P)
+
+echo "SLUG=$SLUG"
+echo "CHECKPOINT_DIR=$CHECKPOINT_DIR"
+echo "CURRENT_BRANCH=$CURRENT_BRANCH"
+echo "HEAD_COMMIT=$HEAD_COMMIT"
+echo "NOW_ISO=$NOW_ISO"
+echo "NOW_FOLDER=$NOW_FOLDER"
+echo "REPO_PATH=$REPO_PATH"
+
+git status --short 2>/dev/null
+git diff --stat 2>/dev/null
+git diff --cached --stat 2>/dev/null
+git log --oneline -10 2>/dev/null
 ```
 
-Rules:
-- Lowercase only
-- Whitespace (incl. newlines) collapsed to single hyphens
-- Strip everything outside the allowlist `a-z 0-9 - .`
-- Cap at 60 characters
-- Empty / fully-stripped → `untitled`
+### Step 2: Infer this session's topic + summary + keywords
 
-### Collision-safe filenames
+From the conversation up to this point, infer:
 
-If `<timestamp>-<slug>.md` already exists (same-second double save with same title), append a 4-character random suffix: `<timestamp>-<slug>-<suffix>.md`. NEVER overwrite. Saved files are append-only.
+- **session_topic_title** — short, stable, goal-oriented (e.g. "auth middleware refactor"). NOT branch-derived. Robust to renames.
+- **session_topic_slug** — lowercase-kebab, ≤60 chars, alnum + hyphen only.
+- **session_summary** — single line ≤200 chars. Plain English. Stable across sessions. Written so a future agent skimming only this line can decide "is this relevant to my new task?". Avoid branch names, SHAs, ticket IDs, jargon.
+- **session_keywords** — 3-7 routing tokens: primary domain noun, sub-feature noun, verb of intent, related-tech, ticket-id-if-any.
+- **session_goal** — 1-3 sentences for `## Topic identity`.
+- **session_decisions** — architectural choices this session, with reasons + tradeoffs.
+- **session_resolved** — items that closed this session.
+- **session_open** — items still open / next steps.
+- **session_blocked** — items blocked, with blocker reason.
+- **session_gotchas** — notes future-you needs.
+- **session_files** — files modified this session.
+- **session_results** — list of `{name, command, output_head, verdict}` entries.
+
+### Step 3: Enumerate prior snapshot folders + group by topic
 
 ```bash
-FILE="${DIR}/${TIMESTAMP}-${TITLE_SLUG}.md"
-if [ -e "$FILE" ]; then
-  SUFFIX=$(LC_ALL=C tr -dc 'a-z0-9' </dev/urandom | head -c 4)
-  FILE="${DIR}/${TIMESTAMP}-${TITLE_SLUG}-${SUFFIX}.md"
+# Build "topic|folder|last_updated|status|title|summary|keywords|branches|abs_path" per snapshot folder.
+> /tmp/all-snapshots.txt
+for d in $(find "$CHECKPOINT_DIR" -mindepth 1 -maxdepth 1 -type d -name "20*-*" 2>/dev/null); do
+  CTX="$d/context.md"
+  [ -f "$CTX" ] || continue
+  T=$(grep -m1 '^topic:' "$CTX" | sed 's/topic: *//')
+  TITLE=$(grep -m1 '^title:' "$CTX" | sed 's/title: *//')
+  SUM=$(grep -m1 '^summary:' "$CTX" | sed 's/summary: *//' | sed 's/^"//; s/"$//')
+  LU=$(grep -m1 '^last_updated:' "$CTX" | sed 's/last_updated: *//')
+  KEYS=$(grep -m1 '^keywords:' "$CTX" | sed 's/keywords: *//')
+  STATUS=$(grep -m1 '^status:' "$CTX" | sed 's/status: *//')
+  RB=$(awk '/^related_branches:/{flag=1; next} flag && /^[a-z_]+:/{flag=0} flag' "$CTX" | grep '^  - ' | sed 's/^  - //' | tr '\n' ',' | sed 's/,$//')
+  printf '%s|%s|%s|%s|%s|%s|%s|%s|%s\n' "$T" "$(basename "$d")" "$LU" "$STATUS" "$TITLE" "$SUM" "$KEYS" "$RB" "$d" >> /tmp/all-snapshots.txt
+done
+
+# Latest snapshot per topic (lexicographic sort on folder name = chrono sort).
+sort -t'|' -k1,1 -k2,2r /tmp/all-snapshots.txt | awk -F'|' '!seen[$1]++' > /tmp/latest-per-topic.txt
+
+echo "--- ALL SNAPSHOTS ---"
+sort -t'|' -k2,2r /tmp/all-snapshots.txt
+echo "--- LATEST PER TOPIC (matching candidates) ---"
+cat /tmp/latest-per-topic.txt
+```
+
+Also enumerate legacy v2 files (`CURRENT-<topic>.md`) for backward-compatible parenting:
+
+```bash
+> /tmp/legacy-v2.txt
+for f in $(find "$CHECKPOINT_DIR" -maxdepth 1 -name "CURRENT-*.md" -type f 2>/dev/null); do
+  T=$(grep -m1 '^topic:' "$f" | sed 's/topic: *//')
+  TITLE=$(grep -m1 '^# CURRENT:' "$f" | sed 's/^# CURRENT: *//')
+  SUM=$(grep -m1 '^summary:' "$f" | sed 's/summary: *//' | sed 's/^"//; s/"$//')
+  LU=$(grep -m1 '^last_updated:' "$f" | sed 's/last_updated: *//')
+  RB=$(awk '/^related_branches:/{flag=1; next} flag && /^[a-z_]+:/{flag=0} flag' "$f" | grep '^  - ' | sed 's/^  - //' | tr '\n' ',' | sed 's/,$//')
+  printf 'legacy_v2|%s|%s|%s|%s|%s|%s\n' "$T" "$f" "$LU" "$TITLE" "$SUM" "$RB" >> /tmp/legacy-v2.txt
+done
+echo "--- LEGACY V2 FILES (still considered for parenting) ---"
+cat /tmp/legacy-v2.txt
+```
+
+If both lists are empty → `MATCH_MODE=new_topic`, skip to Step 5.
+
+### Step 4: Topic-match decision
+
+Compare current session against each candidate (latest v3 folder per
+topic + each legacy v2 file). For each candidate, score four signals:
+
+- **Title overlap** — does `session_topic_title` describe the same workstream as the candidate's `title:` / `# CURRENT: <title>`?
+  - **Strong**: verbatim / near-prefix / paraphrase of the same workstream.
+  - **Weak**: a single common noun shared (e.g. "auth") but modifiers diverge.
+- **Goal overlap** — does the candidate's `## Topic identity` (or v2 `## Goal`) cover the same problem this session is working on?
+  - **Strong**: same problem statement; this session plausibly continues the same workstream.
+  - **Weak**: same domain / subsystem, different problem.
+- **File-path overlap** — `session_files` vs candidate's modified files (from PROGRESS.md session log or v2 cumulative).
+  - **Strong**: ≥1 exact path match, OR ≥2 share a non-trivial directory prefix.
+  - **Weak**: only top-level dir matches.
+- **Branch/commit overlap** — `CURRENT_BRANCH` or `HEAD_COMMIT` in candidate's `related_branches` / `related_commits` as **exact string match** (no prefix, no substring).
+  - **Strong**: exact match.
+  - **Weak**: no exact match. Visual similarity = zero signal.
+- **Keyword overlap** (v3 only) — `session_keywords` ∩ candidate `keywords:`.
+  - **Strong**: ≥2 keyword matches.
+  - **Weak**: 1 keyword match.
+
+Decide:
+
+| Outcome | When | Action |
+|---------|------|--------|
+| `MATCH_MODE=clear_match` | Exactly one candidate has **strong title AND strong goal**, OR exact branch/commit match. Independent paths — either suffices. | Save into new folder with that candidate's `topic` slug; that candidate becomes `parent_snapshot`. |
+| `MATCH_MODE=ambiguous_match` | 2+ candidates with strong overlap, OR 1 candidate with mixed strong+weak signals, OR signals contradict each other. | AskUserQuestion. List candidates + summaries; offer "New topic" as an option. |
+| `MATCH_MODE=new_topic` | No candidate has strong overlap on title OR goal OR exact branch/commit. Single shared common noun is NOT ambiguous. | Create new folder with new topic slug. No parent. |
+
+Bias rules:
+- **Bias toward clear_match.** Branch-hop / commit-hop is normal; same workstream stays in same topic.
+- **Bias against silent merge into wrong topic.** Uncertain → ambiguous, not silent.
+- **Single-word noun coincidence is not ambiguous.** `new_topic`, with a note in the answer if the user wants to reconsider.
+
+For `ambiguous_match` AskUserQuestion shape:
+
+```
+Topic match for this session is ambiguous.
+
+  A) <topic-a slug> — "<title>" — last_updated <date>, status <status>
+     summary: <one line>
+  B) <topic-b slug> — "<title>" — last_updated <date>, status <status>
+     summary: <one line>
+  C) New topic: "<session_topic_title>"  (no parent)
+
+Pick the closest. C creates a separate workstream.
+```
+
+### Step 5: Resolve target folder path
+
+```bash
+# Inputs from Step 4:
+#   MATCH_MODE = clear_match | ambiguous_match_user_picked_existing | new_topic | ambiguous_match_user_picked_new
+#   MATCHED_TOPIC_SLUG = the topic slug to inherit (when continuing)
+#   PARENT_SNAPSHOT_PATH = absolute path to parent folder OR legacy v2 file (when continuing)
+#   PARENT_KIND = v3_folder | v2_legacy_file | none
+
+case "$MATCH_MODE" in
+  clear_match|ambiguous_match_user_picked_existing)
+    TOPIC_SLUG="$MATCHED_TOPIC_SLUG"
+    ;;
+  new_topic|ambiguous_match_user_picked_new)
+    TOPIC_SLUG=$(printf '%s' "$session_topic_title" | tr '[:upper:]' '[:lower:]' | tr -s ' \t/' '-' | tr -cd 'a-z0-9.-' | cut -c1-60)
+    [ -z "$TOPIC_SLUG" ] && TOPIC_SLUG=untitled
+    PARENT_SNAPSHOT_PATH=""
+    PARENT_KIND="none"
+    ;;
+esac
+
+TARGET_FOLDER="$CHECKPOINT_DIR/${NOW_FOLDER}-${TOPIC_SLUG}"
+# Second-resolution collision: append 4-char random suffix.
+if [ -e "$TARGET_FOLDER" ]; then
+  TARGET_FOLDER="${TARGET_FOLDER}-$(LC_ALL=C tr -dc 'a-z0-9' < /dev/urandom | head -c 4)"
+fi
+TMP_FOLDER="${TARGET_FOLDER}.tmp.$$"
+echo "TARGET_FOLDER=$TARGET_FOLDER"
+echo "TMP_FOLDER=$TMP_FOLDER"
+mkdir -p "$TMP_FOLDER"
+```
+
+### Step 6: Read parent (mandatory unless new_topic)
+
+If `PARENT_KIND=v3_folder`, use `Read` to load all four files inside the parent folder:
+
+1. `<parent>/context.md`
+2. `<parent>/DECISIONS.md`
+3. `<parent>/PROGRESS.md`
+4. `<parent>/RESULTS.md`
+
+Read in full, line by line. Do NOT skip. Do NOT summarize from memory.
+Sub-agent digests would silently drop items — read inline.
+
+If `PARENT_KIND=v2_legacy_file`, use `Read` on the single `CURRENT-<topic>.md` file. Treat it as the parent equivalent. Map sections:
+- v2 `## Goal` → seeds v3 `context.md` `## Topic identity`
+- v2 `## Active decisions` → seeds v3 `DECISIONS.md`
+- v2 `## Open remaining work` → seeds v3 `PROGRESS.md`
+- v2 `## Notes & gotchas` → seeds v3 `context.md` `## Notable gotchas`
+- v2 `## Files modified` → seeds v3 `PROGRESS.md` session log
+- v2 `## Session timeline` → seeds v3 `PROGRESS.md` session log
+
+Do NOT delete or modify the v2 file. It stays in place as a backup.
+
+If `PARENT_KIND=none`, skip Step 6.
+
+### Step 7: Write the four files into `$TMP_FOLDER`
+
+Use the `Write` tool. Each file goes to `$TMP_FOLDER/<name>`.
+
+#### 7a — `context.md`
+
+Compose frontmatter from:
+- `topic` = `$TOPIC_SLUG`
+- `title` = inherited from parent unless workstream pivoted (then strike-through old, add new in parent's title row + use new)
+- `summary` = inherited unless workstream pivoted
+- `keywords` = union of parent + session_keywords (dedup, cap at 7)
+- `created` = `$NOW_ISO` (snapshot folder creation; identical across siblings inside this folder)
+- `last_updated` = `$NOW_ISO`
+- `session_number` = parent.session_number + 1, or 1 if new
+- `project_slug` = `$SLUG`
+- `repo_path` = `$REPO_PATH`
+- `current_branch` = `$CURRENT_BRANCH`
+- `head_commit` = `$HEAD_COMMIT`
+- `related_branches` = union of parent + `$CURRENT_BRANCH` (skip if empty)
+- `related_commits` = union of parent + `$HEAD_COMMIT` (skip if empty; cap last 50, oldest rolled to `related_commits_archived` if exceeding)
+- `parent_snapshot` = parent folder basename (or v2 filename) or empty
+- `status` = `in-progress` unless user explicitly marks otherwise
+
+Compose body per the template under "context.md — body" above. Top-N
+lists (decisions, open, resolved) pull from the corresponding sibling
+files. Use the actual values you wrote there.
+
+#### 7b — `DECISIONS.md`
+
+Newest session first. New session block at top:
+
+```markdown
+## Session <N> (<YYYY-MM-DD>)
+- <each session_decision>. **Why:** ... **Tradeoff:** ...
+```
+
+Below it: parent's `DECISIONS.md` content verbatim (or seeded from v2
+`## Active decisions` if parent is legacy).
+
+#### 7c — `PROGRESS.md`
+
+Build sections from:
+- Parent's `## Done` + new resolved items (session_resolved).
+- Parent's `## In progress` + new in-progress items.
+- Parent's `## Open / next steps` + new open items.
+- Parent's `## Blocked` + new blocked items.
+- Session log table: parent's rows + new row prepended.
+
+Resolved items get `[done session <N>, <date>]` marker; never deleted.
+
+#### 7d — `RESULTS.md`
+
+New session block at top:
+
+```markdown
+## Session <N> (<YYYY-MM-DD>)
+
+### <validation name>
+- Command: `...`
+- Output (head):
+  ```
+  ...
+  ```
+- Verdict: ...
+- Full output: `artifacts/logs/<filename>`  (only if too long for inline)
+```
+
+Below it: parent's `RESULTS.md` content verbatim.
+
+If any output exceeds ~20 lines inline, write the full output to
+`$TMP_FOLDER/artifacts/logs/<name>-<timestamp>.log` and reference it
+from the inline block. Create `artifacts/logs/` only if at least one
+log goes there.
+
+#### 7e — Carry-forward checklist (mandatory)
+
+- [ ] Every decision in parent `DECISIONS.md` appears in new `DECISIONS.md` (verbatim or marked superseded).
+- [ ] Every item in parent `PROGRESS.md` appears (open AND `[done session N]`).
+- [ ] Every entry in parent `RESULTS.md` appears.
+- [ ] Session log table has parent rows + new row prepended.
+- [ ] `session_number` incremented (or `1` if new).
+- [ ] `related_branches` / `related_commits` are unions with current.
+- [ ] `parent_snapshot` set to parent folder basename (or v2 filename) — empty only when `new_topic`.
+- [ ] `context.md` body sections present in fixed order.
+- [ ] `context.md` ≤500 lines.
+- [ ] `summary:` ≤200 chars and present.
+- [ ] `keywords:` 3-7 entries.
+
+### Step 7f: Mechanical sanity check
+
+```bash
+if [ -n "$PARENT_SNAPSHOT_PATH" ]; then
+  case "$PARENT_KIND" in
+    v3_folder)
+      P_DEC=$(grep -c '^- ' "$PARENT_SNAPSHOT_PATH/DECISIONS.md" 2>/dev/null || echo 0)
+      P_PROG=$(grep -c '^- ' "$PARENT_SNAPSHOT_PATH/PROGRESS.md" 2>/dev/null || echo 0)
+      P_RES=$(grep -c '^### ' "$PARENT_SNAPSHOT_PATH/RESULTS.md" 2>/dev/null || echo 0)
+      ;;
+    v2_legacy_file)
+      P_DEC=$(awk '/^## Active decisions/,/^## /' "$PARENT_SNAPSHOT_PATH" | grep -c '^- ' || echo 0)
+      P_PROG=$(awk '/^## Open remaining work/,/^## /' "$PARENT_SNAPSHOT_PATH" | grep -cE '^[0-9]+\. ' || echo 0)
+      P_RES=0  # v2 had no RESULTS section
+      ;;
+  esac
+  N_DEC=$(grep -c '^- ' "$TMP_FOLDER/DECISIONS.md" 2>/dev/null || echo 0)
+  N_PROG=$(grep -c '^- ' "$TMP_FOLDER/PROGRESS.md" 2>/dev/null || echo 0)
+  N_RES=$(grep -c '^### ' "$TMP_FOLDER/RESULTS.md" 2>/dev/null || echo 0)
+  echo "PRIOR  decisions=$P_DEC  progress=$P_PROG  results=$P_RES"
+  echo "DRAFT  decisions=$N_DEC  progress=$N_PROG  results=$N_RES"
+  if [ "$N_DEC" -lt "$P_DEC" ] || [ "$N_PROG" -lt "$P_PROG" ] || [ "$N_RES" -lt "$P_RES" ]; then
+    echo "ERROR: draft dropped entries vs parent — STOP, fix merge, do NOT publish"
+    exit 1
+  fi
+fi
+CTX_LINES=$(wc -l < "$TMP_FOLDER/context.md")
+if [ "$CTX_LINES" -gt 500 ]; then
+  echo "ERROR: context.md is $CTX_LINES lines (>500) — push detail into siblings"
+  exit 1
 fi
 ```
 
-## Required Fields (no shortcuts)
+If any check fails: stop, fix the draft, re-check. Do NOT publish a
+broken snapshot.
 
-A save is incomplete if ANY of these is missing or empty. "Couldn't find" is acceptable when documented; silently skipping is not.
-
-### Frontmatter (machine-readable)
-- `saved_at` — ISO 8601 timestamp with timezone offset
-- `repo` — absolute path
-- `branch` — current branch (or `null` outside git)
-- `topic` — one short phrase
-- `status` — `in-progress` (default) or `completed`. Use `completed` only when archiving a finished task for reference; the default is `in-progress`. Restore prioritises `in-progress` saves.
-- `tags` — list, may be empty `[]`
-- `jira` — ticket ID or `null`
-- `pr` — PR URL or `null`
-- `files_modified` — list of repo-relative paths from `git status --short` (both staged and unstaged). Machine-readable mirror of the body's uncommitted list. Empty `[]` if working tree clean.
-- `session_duration_s` — integer seconds since session start, or `null` if unknown. Never write a guessed number.
-- `related_saves` — list of prior save filenames in same `<repo-slug>/` dir on the same topic/branch, may be empty `[]`
-
-### Body sections (human-readable)
-- **Goal** — one paragraph: what the user is trying to accomplish and why
-- **Branch & commits** — branch name, base/merge-base SHA, last 10 commits, uncommitted file list
-- **Decisions** — every choice made and the *why* (not just the *what*). Empty = "no decisions made yet, just exploring" written explicitly.
-- **Investigation** — files read, key code locations as `path:line`, patterns discovered. Empty = "no investigation yet" written explicitly.
-- **Open questions / next steps** — what is unresolved, what to do first on resume. Empty = no save needed (nothing to resume).
-- **Resume hints** — first concrete action on resume + known gotchas
-
-### Conditional (include when relevant)
-- **Failed approaches** — what was tried and rejected, with reason
-- **Mental model / insights** — non-obvious things learned about the system
-- **Related links** — Jira tickets, PR URLs, design docs, Slack threads
-- **Pending tool state** — long-running processes, dev servers, agents in flight
-- **Key code snippets** — small (<20 line) blocks central to the investigation. Reference larger code by `path:line`, do not dump.
-
-## Gather (before drafting)
-
-Run these in parallel:
+### Step 8: Atomic publish
 
 ```bash
-git rev-parse --show-toplevel
-git branch --show-current
-git status --short
-git log -10 --oneline
-git diff --stat
-git merge-base HEAD master 2>/dev/null || git merge-base HEAD main 2>/dev/null
-date '+%Y-%m-%dT%H:%M%z'
+mv "$TMP_FOLDER" "$TARGET_FOLDER"
+ls -la "$TARGET_FOLDER"
 ```
 
-Pull task / decision / investigation content from the conversation transcript — do not ask the user to repeat themselves. Skim the transcript and extract:
-- Every decision or choice point
-- Every file read or modified
-- Every finding or "aha" moment
-- Every question asked but not fully resolved
-- Every dead end ruled out
+`mv` of a directory on the same filesystem is atomic. Readers either
+see the old layout or the complete new layout — never a half-written
+folder.
 
-If unsure whether something is worth capturing, include it. Storage is cheap; reconstructing lost context is expensive.
+### Step 9: Confirm
 
-## File Format
+```
+CONTEXT SAVED (rolling v3, topic-snapshot folder)
+═════════════════════════════════════════════════
+Topic:           {title}
+Topic slug:      {topic-slug}
+Snapshot folder: {YYYY-MM-DD_HHMMSS-<slug>}
+Match mode:      {clear_match | ambiguous_match | new_topic}
+Parent snapshot: {parent basename, or "(new topic)"}
+Session #:       {N}
+Branch:          {branch or "(none)"}
+Commit:          {commit or "(none)"}
+Files this run:  {count}  (cumulative across all sessions: {count})
+Decisions:       {total} (new this session: {n})
+Open work:       {open} (new this session: {n})
+Results:         {entries this session: {n}}
+context.md:      {lines}/500
+artifacts/:      {present | empty}
+═════════════════════════════════════════════════
 
-```markdown
----
-saved_at: 2026-05-05T14:32-07:00
-repo: /Users/toale/Developer/iris
-branch: toale_axoncorp/RMS-109955-searchable-placeholder-visibility
-topic: searchable placeholder card visibility
-status: in-progress
-tags: [iris, form-card, RMS-109955]
-jira: RMS-109955
-pr: null
-files_modified:
-  - packages/iris/src/pages/form/components/searchablePlaceholderCard.tsx
-  - packages/iris/src/pages/form/components/searchablePlaceholderCard.spec.tsx
-session_duration_s: 4320
-related_saves: [2026-05-04-1820-form-card-visibility.md]
+Resume with /context-restore.
+```
+
 ---
 
-# Searchable placeholder card visibility
+## List flow
 
-## Goal
-<1-paragraph statement of what the user is trying to do and why>
-
-## Branch & commits
-- Branch: `<branch>`
-- Base: `<merge-base branch>` (`<sha>`)
-- Recent commits:
-  - `<sha>` <subject>
-  - ...
-- Uncommitted: <list, or "clean">
-
-## Decisions
-- **<decision>** — <why, alternatives considered>
-- ...
-
-## Investigation
-- `<path:line>` — <what was found / why it matters>
-- ...
-
-## Open questions
-- <question or next step>
-- ...
-
-## Failed approaches
-- <approach> — <why rejected>
-
-## Mental model / insights
-- <non-obvious thing learned>
-
-## Related links
-- [RMS-####](url)
-
-## Resume hints
-- Start by: <first concrete action on resume>
-- Watch out for: <gotchas>
-- Dev environment state: <servers running, agents in flight, etc.>
-```
-
-## List Mode (ergonomic helper)
-
-`/context-save list` — show saves for the **current branch** in `~/.claude/contexts/<repo-slug>/`.
-`/context-save list --all` — show saves across all branches.
-
-Read each `*.md` frontmatter to extract `branch`, `status`, `topic`, `saved_at`. Parse the title slug from the filename. Present as a table:
-
-```
-SAVED CONTEXTS (<branch>)
-#  Date              Title                    Status
-─  ────────────────  ───────────────────────  ───────────
-1  2026-05-05 14:32  searchable-placeholder   in-progress
-2  2026-05-04 18:20  form-card-visibility     in-progress
-```
-
-With `--all`, include a Branch column. Sort newest first by filename prefix (`YYYY-MM-DD-HHMM`), not by mtime — filenames are stable across copies/rsync, mtime drifts.
-
-List mode is read-only. It does not modify any file, does not delete saves.
-
-## Linking Related Saves
-
-Before writing, list existing saves in `~/.claude/contexts/<repo-slug>/`. If any prior save matches the current topic, branch, or Jira ticket, include its filename in `related_saves`. This lets `context-restore` reconstruct a timeline rather than treating each save as orphan.
+`/context-save list`
 
 ```bash
-ls -1 ~/.claude/contexts/<repo-slug>/ 2>/dev/null
-grep -l "branch: .*<current-branch>" ~/.claude/contexts/<repo-slug>/*.md 2>/dev/null
-grep -l "jira: <ticket>" ~/.claude/contexts/<repo-slug>/*.md 2>/dev/null
+for d in $(find "$CHECKPOINT_DIR" -mindepth 1 -maxdepth 1 -type d -name "20*-*" 2>/dev/null); do
+  CTX="$d/context.md"
+  [ -f "$CTX" ] || continue
+  # ... extract frontmatter same as Step 3 ...
+done | sort -t'|' -k1,1 -k2,2r | awk -F'|' '!seen[$1]++'
 ```
 
-## Required Save Checklist
+Present as: `TOPIC | LATEST FOLDER | SESSIONS | STATUS | SUMMARY`.
 
-Do **not** write the file until ALL of these are true:
+Add `--all` to list every snapshot (not just latest per topic).
 
-- [ ] Repo slug computed from `git rev-parse --show-toplevel` (or documented absolute cwd if not a repo)
-- [ ] `~/.claude/contexts/<repo-slug>/` exists (created via `mkdir -p`)
-- [ ] Filename uses `<timestamp>-<short-topic>.md` pattern
-- [ ] All frontmatter fields populated (`null` allowed only when truly absent, e.g. `pr: null` if no PR exists; placeholders like `<TODO>` are forbidden)
-- [ ] Goal paragraph written from conversation context, not from memory of similar sessions
-- [ ] Branch & commits captured from real `git` output, not guessed
-- [ ] Decisions section either lists decisions with *why*, or explicitly states "no decisions yet, exploration only"
-- [ ] Investigation section either lists `path:line` findings, or explicitly states "no investigation yet"
-- [ ] Open questions section has at least one concrete next step (otherwise — why save?)
-- [ ] Resume hints written for someone who walks in cold
-- [ ] Prior saves in same `<repo-slug>/` dir checked for `related_saves` links
-- [ ] Path is under `~/.claude/contexts/`, NOT inside the working repo
-- [ ] Title slug ran through the bash allowlist sanitiser (`tr -cd 'a-z0-9.-'`, length ≤60). NOT built by LLM string concatenation.
-- [ ] No `git add` / `git commit` / `git push` / `git stash` / file edit was performed during the save — the skill is capture-only.
+---
 
-After writing, **read the file back** and verify the frontmatter parses and required sections are populated. A save you didn't verify is a save you didn't actually save.
+## Manual merge flow
 
-## Output to User
+`/context-save merge <topic-a-slug> <topic-b-slug>`
 
-After saving:
+When two topic slugs cover the same workstream:
 
-1. Print the absolute path of the saved file.
-2. Print a 2-3 line summary: topic, branch, count of decisions / findings / open items.
-3. Mention any related saves linked.
-4. Mention that `/context-restore` can reload it.
-5. Do not commit the file (it's outside the repo by design).
+1. AskUserQuestion: "Merge `<topic-a>` into `<topic-b>`? Pick canonical slug."
+2. Read the latest folder of each.
+3. Build a new snapshot folder under the canonical slug with `parent_snapshot` set to the loser's latest folder. Merge content (union of decisions, progress, results).
+4. Move all loser folders to `archived/` (never delete — recovery path):
+   `mv "$CHECKPOINT_DIR/<folder>" "$CHECKPOINT_DIR/archived/<folder>--merged-into-<canonical>-<date>"`
+5. Confirm.
 
-## Rationalization Table — STOP if You Think These
+---
 
-| Excuse | Reality |
-|--------|---------|
-| "Session is short, skip the save" | Then user wouldn't have asked. If they invoked context-save, save it. |
-| "I'll capture only the highlights" | Future-you doesn't know which detail mattered. Required fields are required. |
-| "Decisions are obvious, skip that section" | Obvious to current-you ≠ obvious to next-session-you. Document the why. |
-| "Branch state is in git anyway, skip" | Save makes the snapshot atomic with the reasoning. Without it, restore can't know which commit the reasoning matched. |
-| "I'll write this directly into a doc in the repo" | No. Saves go to `~/.claude/contexts/`. Writing inside the repo pollutes PRs and history. |
-| "git status takes time, just paraphrase" | Paraphrase ≠ truth. Run the command. Cost: 1 second. |
-| "Open questions is just my todo list, skip" | The todo list IS the resume value. Without it, resume = re-derive what to do next from scratch. |
-| "Existing save is recent enough, no need" | A new save with `related_saves` link to the old one is cheap and lossless. Make a new one. |
-| "User said 'quick save', skip required fields" | "Quick save" = save without delay, not save with skipped fields. The fields are the contract. |
-| "Failed approaches don't matter once we move on" | They prevent next-session-you from re-trying them. Document them. |
-| "I read the file back? Trust the write" | File systems lie sometimes (perms, full disk, wrong path). Read back. |
-| "Investigation findings are too granular, summarize" | `path:line` references are the highest-value content for resume. Preserve them. |
+## Important rules
 
-## Red Flags — STOP and Restart
+- **Never modify code.** Read-only on the repo; write only into the checkpoint folder.
+- **Topic is the partition.** Folder name encodes topic slug + timestamp. Branches/commits live inside `context.md` as lists.
+- **Never skip topic-match.** Step 4 is load-bearing.
+- **Never skip parent read.** Reading parent in full (line by line) is the only way to carry forward without dropping items.
+- **Carry forward verbatim.** No paraphrase. No silent deletion of resolved or superseded items.
+- **Atomic publish via `.tmp.$$` + `mv`.** Never write directly into the target folder name.
+- **Bias toward merge into matched topic.** Branch- or commit-hopping is normal.
+- **context.md is for routing.** ≤500 lines, scannable, with pointers to siblings. Detail lives in DECISIONS / PROGRESS / RESULTS / artifacts.
+- **All snapshot material stays inside the snapshot folder.** Never reference paths outside `$TARGET_FOLDER` for snapshot-owned artifacts.
 
-| Red flag | What to do |
-|----------|-----------|
-| About to write inside the working repo | Stop. Path must be under `~/.claude/contexts/`. Re-derive. |
-| About to run `git add`/`commit`/`push`/`stash` as "part of saving" | Stop. The skill is capture-only. If the user wants a commit, that's a separate explicit request. |
-| Building the filename via string concatenation in the LLM layer | Stop. User titles are untrusted. Run the bash allowlist sanitiser. |
-| About to interpolate a user-supplied title directly into a shell command (`cat "$file"`, `grep "$title"`) | Stop. Pass via env var; the sanitised slug is the only value safe in path positions. |
-| Frontmatter has placeholder values like `<TODO>` or `???` | Stop. Either fill in or mark explicitly null. No placeholders ship. |
-| Decisions / Investigation sections empty without "(none)" note | Stop. Either populate or document the empty explicitly. |
-| Skipped `git status` / `git log` because "I remember" | Stop. Run the commands. Memory of git state is unreliable. |
-| Filename collision with existing save | Don't overwrite. Append a 4-char random suffix per the Title Sanitisation section. Saves are append-only. |
-| Path under `~/.claude/contexts/` doesn't yet exist | `mkdir -p` first. Don't fail silently. |
-| User in a non-git directory | Use cwd absolute path as repo-slug, document this in frontmatter. Do not abort. |
-| `related_saves` is empty but a prior save on same branch / Jira clearly exists | Stop. List the contexts dir, find the link, populate. |
-| Sensitive content (tokens, credentials, PII) about to be written | Stop. Reference its existence without value. Ask user before persisting. |
+---
 
-## When NOT to Use This Skill
+## Anti-pattern: do NOT use parallel sub-agents on save
 
-- Trivial sessions (one quick question, no investigation, nothing to resume).
-- User explicitly said "don't save" / "ephemeral".
-- The user asked for documentation IN the repo (they want a real doc, not a session save) — point them at the right place; do not save here.
-- Sensitive content the user marked private — flag and ask before persisting.
+Save is sequential. Parent must be read literally, line by line, in
+main context. A sub-agent digest is a summary, and summaries silently
+drop items.
 
-## Edge Cases
+Restore is allowed to parallelize (it dispatches across **separate**
+files with no merge required). Save merges one file into another and
+must see every line.
 
-- **Multiple worktrees of the same repo**: repo-slug uses the worktree's absolute path, so `/Users/toale/Developer/iris` and `/Users/toale/Developer/iris-worktree-1` get separate slugs. Mention this if relevant.
-- **No git repo**: Use cwd absolute path as the slug. Note `branch: null` and `repo` set to cwd in frontmatter.
-- **Sensitive content in conversation**: do not include credentials, tokens, or other secrets in the save. Note their existence ("API key handled in step 3") without the value.
-- **Filename collision**: do not overwrite. Append a 4-character random suffix per the Title Sanitisation section. If a save was made seconds ago with the same title and the user clearly meant to update it, ask before creating a second file.
+---
 
-## Related Skills
+## Red flags — STOP and restart the step
 
-- **context-restore** — The other half. Reads what this skill writes, reconstructs session state.
-- **deep-understand** — Saves are exactly the right place to checkpoint deep-understand findings during long investigations. The Search Ledger and decision table belong in the Investigation and Decisions sections.
+- "Branch is `feat/auth-b` now, last save was on `feat/auth-a`, must be a new topic." → STOP. Branches don't define topics. Re-check Step 4.
+- "I remember the parent's `DECISIONS.md`, I don't need to Read it." → STOP. Read.
+- "Two candidates match weakly, I'll pick the closer one." → STOP. Ambiguous → ask.
+- "Topic slug almost matches, I'll just create a new file." → STOP. Slug match is one signal; check title + goal + files + keywords + branches.
+- "Resolved items are clutter, drop them." → STOP. `[done session N]` + strike-through, never delete.
+- "context.md hit 700 lines; I'll leave it." → STOP. Push detail to siblings.
+- "I'll dispatch a sub-agent to do the merge in parallel." → STOP. Save is sequential.
+- "Skip the `summary:` or `keywords:` fields — title is enough." → STOP. Restore routes on these.
+- "I'll write `RESULTS.md` outside the snapshot folder, into a shared logs dir." → STOP. All snapshot material stays inside the folder.
+- "I'll overwrite the parent v2 `CURRENT-<topic>.md` while migrating." → STOP. Leave it in place as backup; the new v3 folder is independent.

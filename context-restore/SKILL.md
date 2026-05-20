@@ -1,282 +1,390 @@
 ---
 name: context-restore
-description: Use when user wants to resume work from a previously saved Claude Code session, recover state from a prior save, or pick up where they left off. Triggers on "restore context", "where were we", "resume <topic>", "load my last session", "pick up where I left off", "what was I working on", "/context-restore", or when the user begins a session referencing prior work without restating it. Searches ~/.claude/contexts/<repo-slug>/ exhaustively — no shortcutting to "newest only" — walks related_saves chains, merges multi-save timelines, verifies the saved branch/commits/files still exist, and only then produces a resume briefing. Branch checkouts and tree mutations are never silent.
+description: |
+  Use when the user wants to resume work from a prior
+  /context-save snapshot, or says "restore context", "where
+  was I", "resume", "pick up where I left off",
+  "/context-restore". Reads structured topic-snapshot folders
+  (v3 layout) and routes to the best match via frontmatter scoring.
+  When the match is ambiguous, LISTS candidates and ASKS rather than
+  guessing. Lazy-loads sibling files (DECISIONS / PROGRESS / RESULTS /
+  artifacts) only after the user opts in.
+allowed-tools:
+  - Bash
+  - Read
+  - Grep
+  - Glob
+  - Skill
+  - AskUserQuestion
 ---
 
-# context-restore
+# /context-restore — Structured Snapshot Restore (v3)
 
-Find one or more saved contexts for the current repo, validate them against the live tree, merge them if they form a chain, and produce a resume briefing the user can act on.
+You are a Staff Engineer routing the right prior snapshot to the
+current task. Snapshots are folders; each contains a structured
+`context.md` + siblings. Default behavior: pick the right snapshot
+**deterministically when the signal is clear**, and **ask the user
+when it isn't**.
 
-**Core principle:** A save is a snapshot — the world has moved since. The skill's job is not to read a file and dump it; it is to reconstruct a working state by reconciling the saved context with what the repo looks like *now*, and to surface every divergence to the user before they act on stale assumptions.
+**HARD GATE:** No code changes. Read-only.
 
-**HARD GATE — READ-ONLY.** This skill reads files and runs read-only git commands. It does NOT run `git checkout`, `git fetch`, `git stash apply`/`pop`, `git reset`, does NOT write any file, does NOT modify the repo or the saved contexts. Any mutation requires explicit user confirmation, surfaced as a question, never as a fait accompli. If you catch yourself about to write or checkout, STOP.
+**HARD GATE:** When candidate selection is ambiguous, DO NOT auto-pick.
+Surface candidates and ask. Wrong restore = the agent resumes the
+wrong workstream and contaminates context.
 
-**Iron rule:** Never silently checkout a branch, never silently apply diffs, never silently overwrite a working state. Branch switches and tree mutations are destructive and require explicit user confirmation.
+**HARD GATE:** Do NOT eager-load sibling files. Read `context.md` of
+the chosen snapshot; load `DECISIONS.md` / `PROGRESS.md` /
+`RESULTS.md` / artifacts only when the user opts in.
 
-## Storage Location
+---
 
-Saves live at `~/.claude/contexts/<repo-slug>/*.md` where `<repo-slug>` is the current repo's absolute path with `/` → `-` (leading `-` stripped). Compute it from `git rev-parse --show-toplevel`.
+## Detect command
 
-If the directory does not exist or is empty:
-1. Tell the user no saved context exists for this repo.
-2. List sibling repo-slugs under `~/.claude/contexts/` (in case the user is in the wrong cwd or worktree).
-3. Stop. Do not invent context. Do not "find something close" from a different repo without explicit user direction.
+| Form | Meaning |
+|------|---------|
+| `/context-restore` | Relevance-route to best topic for current task signal |
+| `/context-restore <fragment>` | Match against topic-slug / title / keywords |
+| `/context-restore --related <branch-or-sha>` | Match `related_branches` / `related_commits` (exact) |
+| `/context-restore --snapshot <folder-name>` | Direct load of a specific snapshot folder (skip scoring) |
+| `/context-restore list` | List snapshot folders grouped by topic |
+| `/context-restore diff <folder-a> <folder-b>` | Diff two snapshots of same topic |
+| `/context-restore save` | Tell user "Use `/context-save`". Exit. |
 
-## Phase 1: Locate Candidates — Exhaustive
+---
 
-Match what the user asked for. Combine signals — do not pick one and ignore the rest.
+## Restore flow
 
-| User signal | How to match |
-|---|---|
-| Explicit filename | Load that file directly, AND check its `related_saves` chain |
-| Topic / feature name | grep across `topic:`, `tags:`, title, body |
-| Jira ticket (RMS-####) | grep `jira:` field and body |
-| Branch name | grep `branch:` field |
-| Filename number (`restore 2`) | Match against the numbered list from a recent `/context-save list` or freshly-computed enumeration |
-| "last", "most recent" | First file by filename-prefix descending sort (`YYYY-MM-DD-HHMM`). If unqualified, surface top 1; if user said "last 3", surface top 3. |
-| "yesterday", date hint | filter by `saved_at` |
-| PR number / URL | grep `pr:` field and body |
-| Nothing specific | List newest 5-10 with topic + status + saved_at, ask user to pick |
-
-```bash
-REPO_ROOT=$(git rev-parse --show-toplevel 2>/dev/null || pwd)
-SLUG=$(echo "$REPO_ROOT" | sed 's|^/||; s|/|-|g')
-BRANCH=$(git branch --show-current 2>/dev/null)
-DIR="$HOME/.claude/contexts/$SLUG"
-
-# Order saves by filename prefix (YYYY-MM-DD-HHMM), NOT by mtime.
-# Filenames are stable across copies, rsync, worktree moves; mtime drifts.
-# Cap at 20 most recent — a user with 500 saves shouldn't blow the context
-# window just to enumerate. /context-save list handles pagination.
-find "$DIR" -maxdepth 1 -name '*.md' -type f 2>/dev/null | sort -r | head -20
-grep -l "branch: .*$BRANCH" "$DIR"/*.md 2>/dev/null
-grep -ril "<keyword>" "$DIR/" 2>/dev/null
-```
-
-**Always also check the current branch.** Run `git branch --show-current`, then grep saves for that branch. If matches exist, surface them even if the user did not ask — they are almost always relevant.
-
-**Prefer `in-progress` over `completed` saves.** Read each candidate's `status:` frontmatter. Restore prioritises `in-progress`; treat `completed` as archive-only unless the user named one explicitly.
-
-### Hard rule: read every candidate fully
-
-Candidates are not "the newest one". Candidates are **every save** that matched any of the signals above. Read every candidate file fully — frontmatter and body — before forming a briefing. Newest does not necessarily contain the deepest context; sometimes a 3-day-old save has the decision rationale and the newest save just has "next step".
-
-If candidate count is high (>10), tell the user, show topic + saved_at + tags for each, ask which subset to load. Do not silently pick a subset for them.
-
-## Phase 2: Walk the related_saves Chain
-
-For each candidate, follow `related_saves:` recursively until fixed point (no unread file referenced). The chain reconstructs the work timeline.
-
-```
-candidate → related_saves: [A, B] → A.related_saves: [C] → ...
-```
-
-Read every file in the chain. Stop only when every referenced filename has been loaded.
-
-### Hard rule: chain must be closed
-
-Phase 3 (Verification) is **blocked** until the chain is closed — every `related_saves` reference resolved to a read file or documented as missing (file referenced but not present in `~/.claude/contexts/<repo-slug>/`). If a referenced save is missing, surface that to the user — it may have been deleted, moved, or renamed.
-
-### Chain depth cap
-
-If the chain expands to more than **7 unique files**, do not read all of them silently. Tell the user: "this chain has N entries — read the full chain, the most recent 3, or just this save?" Let the user pick. Reading 50 saves blindly will blow the context window and bury the most important content. Cap-and-ask is better than dump-and-hope.
-
-Always read **at minimum** the candidate save itself plus its direct `related_saves` parents. Truncation, if any, applies to deeper ancestors.
-
-## Phase 3: Verify Against Live Tree
-
-A saved context is a snapshot. Before recommending action on it, verify the world has not moved out from under it.
-
-Run these (all read-only):
+### Step 1: Resolve paths
 
 ```bash
-git rev-parse --show-toplevel        # confirm correct repo
-git branch --show-current             # current branch
-git status --short                    # uncommitted state
-git log -10 --oneline                 # recent commits
-git stash list                        # named stashes, if any
+eval "$(~/.claude/skills/gstack/bin/gstack-slug 2>/dev/null)" 2>/dev/null || SLUG=$(basename "$PWD")
+CHECKPOINT_DIR=~/.gstack/projects/$SLUG/checkpoints
+CURRENT_BRANCH=$(git rev-parse --abbrev-ref HEAD 2>/dev/null || echo "")
+HEAD_COMMIT=$(git rev-parse --short HEAD 2>/dev/null || echo "")
+echo "SLUG=$SLUG"
+echo "CHECKPOINT_DIR=$CHECKPOINT_DIR"
+echo "CURRENT_BRANCH=$CURRENT_BRANCH"
+echo "HEAD_COMMIT=$HEAD_COMMIT"
 ```
 
-None of these mutate state. If you find yourself reaching for `git checkout`, `git fetch`, `git stash apply`, `git stash pop`, `git reset`, or any write command, STOP — that requires explicit user confirmation per the HARD GATE.
+### Step 2: Enumerate snapshot folders — frontmatter only
 
-For the **latest save in the chain**, compare:
-
-| Saved | Live | If diverged |
-|-------|------|-------------|
-| `branch` | current branch | Note divergence. Do not auto-checkout. Ask user. |
-| Last commit SHA in save | `git log -1 --format=%H` | Show count of new commits since save. List subjects if ≤10. |
-| Uncommitted files in save | `git status --short` | Show diff between saved set and live set. |
-
-For every `path:line` reference in the save's Investigation section, verify the file still exists at that path. For each missing file, mark in the briefing: `⚠ <path> referenced in save no longer exists — possibly renamed, deleted, or moved`.
-
-For every `path:line` that exists, sanity-check that the file is at least `line` long. Code rots between saves; deep verification of every line is excessive, but a file-existence + size check is required.
-
-### Stash verification
-
-If the save's body mentions a `git stash` (resume hints, notes, or pending state), run `git stash list` and verify the stash is still present. Match by message substring when possible.
-
-- Stash present → mention it in the briefing so the user knows to `git stash apply --index <ref>` deliberately.
-- Stash missing → ⚠ warn explicitly: `Save references stash "<msg>" but it is not in stash list — may have been popped or dropped`. Suggest `git fsck --lost-found` if the user wants to attempt recovery.
-
-**Never automatically `git stash apply`, `git stash pop`, or `git stash drop`.** Stash operations are destructive and require explicit user confirmation per the HARD GATE.
-
-### Hard rule: never silently checkout
-
-If the saved branch differs from the current branch:
-1. Tell the user: "Saved branch was `<saved>`, you are on `<current>`."
-2. Show the divergence (`git log <saved>..<current>` or vice versa).
-3. Ask whether to switch branches, work without switching, or abort.
-4. **Never run `git checkout` without explicit user confirmation.** Branch switches can lose uncommitted work.
-
-If the saved branch no longer exists locally:
-1. Tell the user.
-2. Check if it exists on remote (`git branch -r | grep <branch>`).
-3. Ask whether to fetch/recreate or proceed without it.
-
-If commits referenced in the save are no longer in branch history (force-push, rebase, branch deletion):
-1. Surface explicitly. The reasoning in the save may not apply to the current commit.
-2. Suggest `git reflog` to locate the original commits if needed.
-
-## Phase 4: Multi-Save Merge (if chain has >1 save)
-
-When the chain has multiple saves, build a unified briefing — do not just read out the newest.
-
-1. Order saves by `saved_at` ascending (oldest first).
-2. **Goal**: take from the latest save (most current understanding).
-3. **Decisions**: union across all saves, deduped, in chronological order. Note when a later save reverses an earlier decision — surface the reversal explicitly.
-4. **Investigation**: union, with the source save annotated for each finding. Drop entries that were superseded.
-5. **Open questions**: take from the latest save only (older ones are presumed resolved unless still appearing in the latest).
-6. **Failed approaches**: union across all saves — these stay relevant indefinitely.
-7. **Timeline**: short list of `<date>: <one-line summary>` pulled from each save's topic + goal. Gives the user a sense of how the work evolved.
-
-If saves contradict each other (different branch, conflicting decisions, inconsistent investigation findings), surface the conflict to the user — do not silently pick one. The conflict itself is a finding.
-
-## Phase 5: Briefing Preconditions
-
-Do not emit a briefing until all are true:
-
-- [ ] Phase 1 candidate set built from at least 2 signals (current branch always one of them, when the user is in a git repo)
-- [ ] Phase 2 related_saves chain closed for every candidate
-- [ ] Every candidate file read fully (not just frontmatter, not just summary)
-- [ ] Phase 3 verification run: branch, recent commits, uncommitted state, stash list, file existence for every `path:line` reference
-- [ ] Phase 4 merge produced (if chain has >1 save)
-- [ ] Conflicts between saves explicitly identified or absence of conflicts confirmed
-- [ ] No branch checkout, fetch, stash apply/pop, or reset has been performed without user confirmation
-- [ ] No file has been modified, no save file has been touched
-
-Skipping any precondition produces a briefing that points at stale state, and the user acts on stale assumptions. That is worse than no restore.
-
-## Phase 6: Briefing Format
-
-Concise. Not a dump. The user has the broad context — they just need their working state restored to active memory.
-
-```
-**Resumed: <topic>** (saved <relative time>, branch `<saved-branch>`)
-Loaded <N> saves from chain (<oldest-date> → <newest-date>).
-
-**Goal:** <1-2 lines>
-
-**Where we left off:**
-- <last decision / state>
-- <last investigation finding>
-- <last completed step>
-
-**Open:**
-- <next concrete step>
-- <unresolved question>
-
-**Verification:**
-- Branch: ✓ on saved branch / ✗ on `<current>` (saved was `<saved>`)
-- New commits since latest save: <N> [list 1-line subjects if ≤5, summary if more]
-- Uncommitted: matches save / diverged: <details>
-- Files referenced: <N> intact / <N> missing [list missing]
-
-**Conflicts** (if multi-save):
-- <date>: decided X. <date>: reversed to Y. Currently: Y.
-
-**Timeline** (if multi-save):
-- <date>: <one-line>
-- <date>: <one-line>
-
-Ready to continue. <Suggested first action OR explicit question if branch/state diverged>
-```
-
-After the briefing, hold the full save content (including older saves in the chain) in conversation context — the user may follow up with "wait, when did we decide X?".
-
-If the save references specific files that are central to the work, proactively read the most important 1-2 to have them fresh in context. Do not read all referenced files (could be many) — pick by relevance to the next step.
-
-## Cross-Repo Restore
-
-User may want to restore from a different repo than the current one. Support this:
+**Hard rule:** Step 2 reads frontmatter via `grep -m1` / bounded
+`awk`. NEVER load full `context.md` bodies in this step. The whole
+point of the `summary:` + `keywords:` fields is that routing can be
+judged from one line + a short list per folder — without burning
+context on N×bodies.
 
 ```bash
-# List all repo contexts
-ls ~/.claude/contexts/
+> /tmp/all-snapshots.txt
+for d in $(find "$CHECKPOINT_DIR" -mindepth 1 -maxdepth 1 -type d -name "20*-*" 2>/dev/null); do
+  CTX="$d/context.md"
+  [ -f "$CTX" ] || continue
+  T=$(grep -m1 '^topic:' "$CTX" | sed 's/topic: *//')
+  TITLE=$(grep -m1 '^title:' "$CTX" | sed 's/title: *//')
+  SUM=$(grep -m1 '^summary:' "$CTX" | sed 's/summary: *//' | sed 's/^"//; s/"$//')
+  KEYS=$(grep -m1 '^keywords:' "$CTX" | sed 's/keywords: *//')
+  LU=$(grep -m1 '^last_updated:' "$CTX" | sed 's/last_updated: *//')
+  STATUS=$(grep -m1 '^status:' "$CTX" | sed 's/status: *//')
+  SN=$(grep -m1 '^session_number:' "$CTX" | sed 's/session_number: *//')
+  RB=$(awk '/^related_branches:/{flag=1; next} flag && /^[a-z_]+:/{flag=0} flag' "$CTX" | grep '^  - ' | sed 's/^  - //' | tr '\n' ',' | sed 's/,$//')
+  RC=$(awk '/^related_commits:/{flag=1; next} flag && /^[a-z_]+:/{flag=0} flag' "$CTX" | grep '^  - ' | sed 's/^  - //' | tr '\n' ',' | sed 's/,$//')
+  printf '%s|%s|%s|%s|%s|%s|%s|%s|%s|%s\n' \
+    "$T" "$(basename "$d")" "$LU" "$STATUS" "$SN" "$TITLE" "$SUM" "$KEYS" "$RB" "$RC" >> /tmp/all-snapshots.txt
+done
 
-# Search across all repos
-grep -rl "<keyword>" ~/.claude/contexts/*/
+# Layout: topic | folder | last_updated | status | session_n | title | summary | keywords | branches | commits
+# Latest snapshot per topic = first row per topic when sorted by folder name desc.
+sort -t'|' -k1,1 -k2,2r /tmp/all-snapshots.txt | awk -F'|' '!seen[$1]++' > /tmp/latest-per-topic.txt
+
+echo "--- LATEST PER TOPIC ---"
+cat /tmp/latest-per-topic.txt
 ```
 
-If the match is in a different repo, tell the user which repo it belongs to, and whether they need to `cd` there before resuming code work.
+If no v3 folders exist, fall back to legacy v2 files (`CURRENT-*.md`):
 
-## Rationalization Table — STOP if You Think These
+```bash
+LEGACY_V2=$(find "$CHECKPOINT_DIR" -maxdepth 1 -name "CURRENT-*.md" -type f 2>/dev/null)
+LEGACY_AUDIT_NEWEST=$(find "$CHECKPOINT_DIR" -maxdepth 1 -name "20*.md" -type f 2>/dev/null | sort -r | head -1)
+echo "LEGACY_V2 files: $LEGACY_V2"
+echo "LEGACY_AUDIT_NEWEST: $LEGACY_AUDIT_NEWEST"
+```
 
-| Excuse | Reality |
-|--------|---------|
-| "Newest save is enough, skip the chain" | Newest save's `related_saves` exists for a reason. The earlier saves contain the *why* the latest save assumes. Read them. |
-| "User just said 'restore', any save works" | Wrong save = wrong briefing. If signals are ambiguous, ask. |
-| "Skip verification — repo is probably the same" | "Probably" is exactly when stale assumptions cost time. Run the verifications. |
-| "I'll auto-checkout the saved branch, that's what they want" | No. Checkout is destructive. Always ask. |
-| "Save says file X is at path Y, just trust it" | Code rots. Verify path Y still exists before referencing it in the briefing. |
-| "Conflicts between saves are confusing — pick the most recent" | Silently picking = lying about the work history. Surface the conflict; let user decide. |
-| "Briefing is taking too long, just dump the latest save" | Dump ≠ briefing. The user can read the file themselves. The skill's value is reconciliation. |
-| "Empty result — no saves match — invent something close" | No. Empty result is a real result. Tell the user, list available repo-slugs, stop. |
-| "User is in a hurry, skip the verification phase" | Stale state acted on in a hurry breaks more than verification took. Verify. |
-| "Investigation section is long, summarize" | Future-you needs the specifics. Preserve `path:line` references in the briefing or in held context. |
-| "Latest save said decision X — use it" | If an earlier save said NOT X and was reversed, surface the reversal. The user may want to revisit. |
-| "Skip checking sibling repo-slugs if dir is empty" | User may be in wrong worktree. Listing siblings takes 1 second. Do it. |
-| "I'll silently load the file the user named, skip chain walk" | User named one file; the chain may extend to others they don't remember. Walk it. |
-| "Chain has 5 saves, just read the newest 2" | Chain length under the 7-file cap is not a reason to truncate. Read all. The skipped saves contain the assumptions you'll silently violate. Cap-and-ask applies only above 7. |
-| "Save references a stash — let me apply it for them" | No. Stash apply/pop is destructive. Verify the stash exists, mention it in the briefing, let the user run apply themselves. |
-| "`ls -1t` is fine, mtime is close enough" | No. Filenames carry the canonical timestamp (`YYYY-MM-DD-HHMM`). mtime drifts on rsync/copy/worktree-move and lies about save order. Sort by filename. |
-| "Completed-status save matched first — load it" | Completed saves are archive. Skip past them to the newest `in-progress`, unless the user named the completed save explicitly. |
+If no v3 AND no legacy → tell user "no snapshots; run `/context-save` first".
 
-## Red Flags — STOP and Restart
+### Step 3: Acquire task signal
 
-| Red flag | What to do |
-|----------|-----------|
-| About to run `git checkout` without user confirmation | Stop. Ask first. Always. |
-| Skipping verification because "the save is recent" | Stop. Recent ≠ unchanged. Run the checks. |
-| Briefing emitted before chain is closed | Stop. Walk every `related_saves` ref. |
-| Selected one of many candidates without telling user | Stop. Show the list. Let user pick. |
-| Save references a file that no longer exists, briefing doesn't mention it | Stop. Add the warning. |
-| Save references branch that doesn't exist locally, no warning | Stop. Check remote, ask user. |
-| Multi-save merge that silently picks one save's decision over another | Stop. Surface the conflict. |
-| Skipped reading older saves in chain because "newest is enough" | Stop. Read them all. The chain exists for a reason. |
-| Modified any file or git state during restore | Stop. Restore is read-only by default. Reverse the change, ask user. |
-| Save older than 30 days, briefing presented as authoritative | Add staleness warning. Suggest re-verifying key facts. |
-| About to `git stash apply` / `pop` / `drop` to "restore the working state" | Stop. Read-only. Mention the stash in the briefing; let the user run apply. |
-| Chain depth >7 about to be silently consumed | Stop. Ask the user: full chain, top-3, or single save? |
-| Used `ls -1t` for ordering | Stop. Use `find ... | sort -r` on filename prefix. mtime is not canonical. |
+In priority order:
 
-## When NOT to Use This Skill
+1. Explicit `<fragment>` arg → matches against `topic-slug`, `title`, `keywords`.
+2. `--related <branch-or-sha>` arg → exact match against `related_branches` / `related_commits`.
+3. `--snapshot <folder-name>` arg → direct-load mode; skip scoring entirely.
+4. Most recent user message in this conversation describing intent (e.g. "I'm fixing auth redirects" → task tokens = `auth, redirects, fix`).
+5. `CURRENT_BRANCH` (weak hint).
+6. None — bare `/context-restore` with no signal at all.
 
-- The user is starting genuinely new work unrelated to any prior save — do not force-fit.
-- No saves exist for this repo — say so, suggest using `context-save` going forward.
-- User explicitly said "fresh start" / "ignore history" / "clean slate" — respect that.
-- User is in a different repo than the saves are for — confirm before loading from sibling slugs.
+### Step 4: Score candidates
 
-## Edge Cases
+For each "latest per topic" row, score five signals against the task signal:
 
-- **Multiple repos with the same name** (e.g., two clones, fork + upstream): repo-slug uses absolute path so they don't collide. If the user is in the wrong worktree, they will see no saves — suggest `ls ~/.claude/contexts/` to find the right slug.
-- **Save references a branch that no longer exists**: warn, list local branches, check remote, ask whether to fetch/recreate or proceed without checkout.
-- **Save references a deleted file**: surface in briefing as `⚠ <path> referenced in save no longer exists`. Suggest `git log --diff-filter=D -- <path>` to find when it was removed.
-- **Save's commits no longer in branch history** (force-push, rebase): surface explicitly. Suggest `git reflog` to locate originals if needed.
-- **`related_saves` references a missing file**: note as `⚠ chain reference <filename> not found in contexts dir`. Continue with available saves.
-- **Frontmatter parse error**: do not silently skip the save. Tell the user the file is malformed, show the offending file, ask how to handle. Try to parse the markdown body separately.
-- **Very old saves (>30 days)**: add a staleness warning to the briefing. Suggest verifying key facts before acting on them.
+| Signal | Strong | Weak | None |
+|--------|--------|------|------|
+| Summary text overlap | shares ≥1 domain noun **and** verb/intent | shares 1 common noun only | no overlap |
+| Keywords overlap | ≥2 keyword matches | exactly 1 keyword match | 0 |
+| Branch overlap | task-supplied branch OR `CURRENT_BRANCH` appears exactly in `related_branches` | shared prefix only (e.g. `feat/auth-a` vs `feat/auth-b`) | none |
+| Commit overlap | task-supplied SHA matches a `related_commits` entry exactly (7-char prefix) | none | none |
+| Recency | `last_updated` within last 7 days | within 30 days | older |
 
-## Related Skills
+Per topic:
 
-- **context-save** — The other half. Writes the files this skill reads.
-- **deep-understand** — Restored saves often contain partial Search Ledgers from a prior deep-understand session. Treat the ledger as resumable: continue searching the unattempted rows, do not start over.
+- `score_strong = count(strong signals)`
+- `score_weak   = count(weak signals)`
+
+Status modifier:
+- `status: in-progress` → no change
+- `status: resolved` → demote one strong → weak (we usually don't resume resolved work)
+- `status: abandoned` → strip all strong signals (never auto-pick abandoned)
+
+Order topics by `(score_strong DESC, score_weak DESC, last_updated DESC)`.
+
+### Step 5: Decision logic
+
+```
+EXPLICIT MODES
+==============
+A. --snapshot <folder>
+   - Validate folder exists in CHECKPOINT_DIR.
+   - On hit → load. On miss → tell user, list nearest matches, exit.
+
+B. <fragment> arg
+   - Match against (topic-slug, title, keywords) case-insensitive.
+   - 1 match    → load.
+   - 2+ matches → AskUserQuestion (parallel-digest if ≥3).
+   - 0 matches  → tell user "no match for <fragment>"; offer most-recently-updated
+                  topic as fallback. DO NOT auto-load.
+
+C. --related <branch-or-sha>
+   - Search `related_branches` / `related_commits` for exact match.
+   - 1 topic contains it    → load.
+   - 2+ topics contain it   → AskUserQuestion (parallel-digest if ≥3).
+   - 0                      → tell user; offer fallback. DO NOT auto-load.
+
+RELEVANCE-SCORED MODE (default, when no explicit arg)
+=====================================================
+Compute (score_strong, score_weak) per topic. Order desc.
+
+D. Clear winner
+   - top.score_strong ≥ 2 AND top.score_strong > second.score_strong
+   - → AUTO-LOAD top.
+
+E. Good-enough winner
+   - top.score_strong == 1 AND top.score_weak ≥ 2 AND
+     top.{strong+weak} > second.{strong+weak}
+   - → AUTO-LOAD top.
+
+F. Tie at strong
+   - top.score_strong ≥ 1 AND second.score_strong == top.score_strong
+   - → AMBIGUOUS → AskUserQuestion (parallel-digest if ≥3 candidates).
+   - Include "None of these — start fresh" option.
+
+G. Strong + conflicting weak
+   - top has strong title but weak goal contradicts; OR strong branch
+     but no other strong signal
+   - → AMBIGUOUS → AskUserQuestion.
+
+H. Weak task signal, no strong matches
+   - task signal exists but no topic scores ≥1 strong
+   - → tell user "no strong match for <task>"; surface top 3 weak/none
+     candidates with summaries; offer most-recently-updated as fallback.
+   - DO NOT auto-load.
+
+I. No task signal at all (bare command)
+   - load most-recently-updated topic (the legacy default).
+   - tell user it was selected by recency, not relevance.
+
+J. No topic files at all
+   - fall back to legacy v2 CURRENT-*.md (read inline).
+   - if still nothing, fall back to newest timestamped audit file.
+   - if still nothing, tell user.
+```
+
+### Step 6: Multi-candidate digest via parallel agents
+
+When AskUserQuestion is triggered AND there are 3+ candidates,
+dispatch `superpowers:dispatching-parallel-agents` — one sub-agent
+per candidate folder. Each sub-agent receives:
+
+1. Absolute path to that candidate's `context.md`.
+2. Task description (verbatim from the user's most-recent message).
+3. Output contract:
+   - folder name
+   - last_updated
+   - status
+   - one-line topic summary (echoed)
+   - 1-2 reasons this **might match** the task
+   - 1-2 reasons this **might NOT match**
+   - confidence: high / medium / low
+   - ≤150 words total
+
+Main agent merges digests into AskUserQuestion options.
+
+```
+Multiple snapshots might match your task. Pick one:
+
+  A) <folder-a>  (status: in-progress, updated 2 days ago)
+     "<summary>"
+     Might match: <reason>
+     Might NOT match: <reason>
+     Confidence: high
+
+  B) <folder-b>  (status: in-progress, updated 6 days ago)
+     "<summary>"
+     Might match: <reason>
+     Might NOT match: <reason>
+     Confidence: medium
+
+  C) <folder-c>  ...
+
+  D) None of these — start fresh without restoring.
+```
+
+For 2 candidates, do inline `Read`s on both `context.md` files (no
+parallel dispatch — overhead exceeds savings).
+
+### Step 7: Load the chosen snapshot — `context.md` only
+
+Use `Read` on `<chosen-folder>/context.md`. Present verbatim — no
+truncation, no condensing.
+
+```
+RESUMING CONTEXT (rolling v3, topic-snapshot)
+═════════════════════════════════════════════
+Topic:           {title}
+Topic slug:      {topic-slug}
+Snapshot:        {folder name}
+Status:          {status}
+Last updated:    {last_updated, human-readable}
+Session #:       {session_number}
+Branch (now):    {CURRENT_BRANCH or "(none)"}
+Branch (saved):  {current_branch from frontmatter}
+Related branches:{list}
+Related commits: {list}
+Parent snapshot: {parent_snapshot or "(new topic)"}
+═════════════════════════════════════════════
+
+[body of context.md verbatim — Topic identity, Quick state, Active
+decisions (top 5), Open work (top 5), Recently resolved, Notable
+gotchas, How to resume, Routing hints]
+```
+
+### Step 8: Branch-mismatch nudge (non-blocking)
+
+If `CURRENT_BRANCH` is non-empty AND not in the snapshot's
+`related_branches`, append (do NOT block):
+
+```
+[BRANCH NOT IN SNAPSHOT'S RELATED LIST]
+Current branch:    {CURRENT_BRANCH}
+Snapshot branches: {list}
+This snapshot might be the wrong workstream for what you're about to do.
+Consider /context-restore --related {CURRENT_BRANCH} or
+/context-restore list to pick a different topic.
+```
+
+### Step 9: Offer next actions (lazy-load siblings)
+
+AskUserQuestion:
+
+- A) Continue from the first open item in `PROGRESS.md` → load `PROGRESS.md`
+- B) Read full decision log → load `DECISIONS.md`
+- C) Read validation results → load `RESULTS.md`
+- D) Browse artifacts → list `<folder>/artifacts/` (if present)
+- E) Switch to a different snapshot → run `list` or accept new `<fragment>`
+- F) Diff this snapshot against the previous one for this topic → run `diff`
+- G) Just needed context.md, thanks → exit
+
+Siblings are only `Read` after the user picks the corresponding
+option. Conserves context window.
+
+---
+
+## `--snapshot` flow (direct load)
+
+`/context-restore --snapshot <folder-name>`
+
+```bash
+TARGET="$CHECKPOINT_DIR/$ARG"
+if [ ! -d "$TARGET" ] || [ ! -f "$TARGET/context.md" ]; then
+  echo "Snapshot folder not found: $ARG"
+  # Suggest nearest matches by edit-distance or prefix
+  find "$CHECKPOINT_DIR" -mindepth 1 -maxdepth 1 -type d -name "*$(echo $ARG | head -c 16)*" | head -5
+  exit 0
+fi
+```
+
+Skip scoring. Load `<folder>/context.md` directly. Proceed to Step 7.
+
+## `--diff` flow
+
+`/context-restore diff <folder-a> <folder-b>`
+
+Read both `context.md` files. Present:
+
+- Decisions: added in B, removed (impossible — superseded only), newly superseded
+- Progress: items moved from Open → Done; items newly opened; items newly blocked
+- `related_branches` / `related_commits`: added in B
+- `session_number` delta
+- `last_updated` delta
+
+Useful for "what changed between yesterday's snapshot and today's".
+
+## `list` flow
+
+```
+TOPIC                   LATEST FOLDER                               SESSIONS  STATUS         SUMMARY
+auth-middleware-rewrite 2026-05-20_143022-auth-middleware-rewrite  5         in-progress    Replace legacy session-token middleware...
+checkout-perf           2026-05-19_090112-checkout-perf            3         resolved       Cut p95 from 1200ms to 300ms by removing N+1
+context-save-v3         2026-05-20_171545-context-save-v3          2         in-progress    Upgrade rolling save/restore to topic-snapshot folders
+```
+
+Sorted by `last_updated` desc. Add `--all` to list every snapshot (not just latest per topic).
+
+---
+
+## Legacy compatibility
+
+When v3 folders don't exist for a topic the user is asking about,
+fall back in order:
+
+1. Legacy v2 `CURRENT-<topic-slug>.md` — read inline.
+2. Legacy gstack timestamped audit `20YYMMDD-HHMMSS-*.md` — read newest.
+
+Always tell the user which layer the data came from. Encourage running
+`/context-save` to upgrade the topic to v3 on next save (the
+save skill auto-detects v2 parents and migrates seamlessly).
+
+---
+
+## Important rules
+
+- **Frontmatter routing first.** Never load bodies during enumeration. Bodies are loaded only for the **chosen** target.
+- **Ask when ambiguous.** Wrong restore = context contamination across workstreams.
+- **Parallel agents for 3+ candidate digests.** Inline `Read` for ≤2.
+- **Lazy-load siblings.** Read `context.md` first; load `DECISIONS.md` / `PROGRESS.md` / `RESULTS.md` / artifacts only on user opt-in.
+- **Branch mismatch = informational, not blocking.** A topic can legitimately span branches.
+- **Resolved / abandoned topics demote in scoring but still appear in `list`.** User can explicitly resume them.
+- **No truncation on the chosen body.** `context.md` is already capped at 500 lines — show all of it.
+
+---
+
+## Red flags — STOP and re-read this skill
+
+- "Two topics partially match — I'll pick the more recent one." → STOP. Ambiguous → AskUserQuestion.
+- "I'll read every `context.md` in full to find the right one." → STOP. Use frontmatter scoring; load only the chosen body.
+- "I'll read `DECISIONS.md` eagerly to give a richer presentation." → STOP. Lazy-load. User opts in.
+- "Frontmatter `summary:` is missing on this folder; I'll read the body to infer." → STOP. Either fall back to first ~200 chars of `## Topic identity`, or skip with a warning, or ask. Never silently fabricate.
+- "Score is 0 strong / 0 weak across all topics; I'll auto-pick the newest." → STOP. Tell user "no strong match"; offer most-recent as fallback; let them decide.
+- "Three candidates, I'll just read them all inline." → STOP. ≥3 → parallel agents.
+- "User passed `--snapshot foo`, folder doesn't exist, I'll grab the next-closest." → STOP. Tell user, list near matches, let them pick.
+- "Resolved topic is the top hit — auto-load it." → STOP. Resolved status demotes by one strong → weak. Only auto-load if it still wins after demotion.
+- "Current branch isn't in the snapshot's `related_branches`, I'll auto-switch topics." → STOP. Surface the mismatch, do not block, let the user decide.
