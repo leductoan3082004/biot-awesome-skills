@@ -6,7 +6,7 @@ Claude-specific layer on top of the vendor-neutral baseline. The baseline is aut
 
 `~/.claude/CLAUDE.md` is a symlink to this file. Edit this file; the symlink follows. Anything vendor-neutral belongs in `AGENTS.md`, not here.
 
-**Hook + global-rule sync:** When any file under `hooks/`, this file, `AGENTS.md`, or `instructions/` is modified, commit + push to the biot remote in the same turn so other machines/sessions stay in sync.
+**Hook + global-rule sync:** When any file under `hooks/`, this file, `AGENTS.md`, or `~/.claude/instructions/` is modified, commit + push to the biot remote in the same turn so other machines/sessions stay in sync.
 
 ---
 
@@ -26,9 +26,9 @@ Read these files **before acting** in the relevant scope.
 
 | Topic | File | Read when |
 |---|---|---|
-| Agent delegation (model selection, trust/verify policy) | `instructions/agent-delegation.md` | About to spawn a sub-agent via the Agent tool |
-| Operating rules (the 12) | `instructions/operating-rules.md` | Starting a non-trivial task — read once per session |
-| gstack skills index | `instructions/gstack-skills.md` | Considering any `/gstack-*` (or related) skill invocation |
+| Agent delegation (model selection, trust/verify policy) | `~/.claude/instructions/agent-delegation.md` | About to spawn a sub-agent via the Agent tool |
+| Operating rules (the 12) | `~/.claude/instructions/operating-rules.md` | Starting a non-trivial task — read once per session |
+| gstack skills index | `~/.claude/instructions/gstack-skills.md` | Considering any `/gstack-*` (or related) skill invocation |
 
 ---
 
@@ -41,6 +41,6 @@ Pulled in via `@AGENTS.md` above. The high-priority ones restated for visibility
 - **Save trigger**: invoke `/context-save` before final response after substantive work; skip for trivial replies.
 - **Verification gate**: task incomplete until tests pass, build succeeds, runtime behavior matches expectations, lint/type-check is clean.
 - **One feature at a time**: finish + e2e verify feature A before starting feature B; no opportunistic refactors mid-feature.
-- **Completion discipline**: verify done with evidence (structure → behavior → e2e), report changed/verified/passed/unverified — full rules: `instructions/completion-discipline.md`.
+- **Completion discipline**: verify done with evidence (structure → behavior → e2e), report changed/verified/passed/unverified — full rules: `~/.claude/instructions/completion-discipline.md`.
 
-For full text of any of these, see `instructions/commit-policy.md`, `instructions/engineering-discipline.md`, or `instructions/context-save.md` via the `AGENTS.md` routing table.
+For full text of any of these, see `~/.claude/instructions/commit-policy.md`, `~/.claude/instructions/engineering-discipline.md`, or `~/.claude/instructions/context-save.md` via the `AGENTS.md` routing table.

@@ -12,7 +12,7 @@ Keep this router short. If you find yourself typing vendor-specific terms (`Opus
 - **Five non-negotiables** — (1) Surface assumptions before non-trivial work. (2) Stop when confused — name the confusion, ask. (3) Push back when warranted — sycophancy is a failure mode. (4) Prefer boring — fewer lines, naive-correct over clever-fragile. (5) Scope discipline — touch only what the task requires.
 - **Save trigger** — Invoke `/context-save` before the final response after substantive work (code edit / decision / fix / refactor / finding). Skip for trivial replies, clarifying questions, read-only exploration. When in doubt → skip.
 - **Verification gate** — Task is incomplete until tests pass, build succeeds, runtime behavior matches expectations, lint/type-check is clean. "Seems right" is never sufficient.
-- **Completion discipline** — Verify with evidence before declaring done: structure → behavior → end-to-end path. Report what you changed, what you verified, what passed, what remains unverified. Full rules: `instructions/completion-discipline.md`.
+- **Completion discipline** — Verify with evidence before declaring done: structure → behavior → end-to-end path. Report what you changed, what you verified, what passed, what remains unverified. Full rules: `~/.claude/instructions/completion-discipline.md`.
 - **Process over prose** — Pick the workflow / skill that matches the task. Follow steps in order. Hit every checkpoint.
 - **One feature at a time** — Finish + end-to-end verify feature A before starting feature B. No opportunistic "also refactor" of unrelated code mid-feature.
 
@@ -24,8 +24,8 @@ Read these files **before acting** in the relevant scope.
 
 | Topic | File | Read when |
 |---|---|---|
-| Git commit policy (full text, examples, validation checklist) | `instructions/commit-policy.md` | Composing any commit message |
-| PR creation policy (template handling, accuracy rules, examples) | `instructions/pr-policy.md` | Opening or updating a PR |
-| Engineering discipline (anti-rationalization table, process-over-prose, verification, progressive disclosure, 5 non-negotiables expanded) | `instructions/engineering-discipline.md` | Starting non-trivial work — read once per session |
-| Completion discipline (verification checklist, definition of done, completion-report shape) | `instructions/completion-discipline.md` | Before declaring any task complete |
-| Context save policy (full trigger criteria, v3 layout, restore flow) | `instructions/context-save.md` | Before invoking `/context-save` |
+| Git commit policy (full text, examples, validation checklist) | `~/.claude/instructions/commit-policy.md` | Composing any commit message |
+| PR creation policy (template handling, accuracy rules, examples) | `~/.claude/instructions/pr-policy.md` | Opening or updating a PR |
+| Engineering discipline (anti-rationalization table, process-over-prose, verification, progressive disclosure, 5 non-negotiables expanded) | `~/.claude/instructions/engineering-discipline.md` | Starting non-trivial work — read once per session |
+| Completion discipline (verification checklist, definition of done, completion-report shape) | `~/.claude/instructions/completion-discipline.md` | Before declaring any task complete |
+| Context save policy (full trigger criteria, v3 layout, restore flow) | `~/.claude/instructions/context-save.md` | Before invoking `/context-save` |
