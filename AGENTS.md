@@ -13,6 +13,7 @@ Keep this router short. If you find yourself typing vendor-specific terms (`Opus
 - **Save trigger** — Invoke `/context-save` before the final response after substantive work (code edit / decision / fix / refactor / finding). Skip for trivial replies, clarifying questions, read-only exploration. When in doubt → skip.
 - **Verification gate** — Task is incomplete until tests pass, build succeeds, runtime behavior matches expectations, lint/type-check is clean. "Seems right" is never sufficient.
 - **Process over prose** — Pick the workflow / skill that matches the task. Follow steps in order. Hit every checkpoint.
+- **One feature at a time** — Finish + end-to-end verify feature A before starting feature B. No opportunistic "also refactor" of unrelated code mid-feature.
 
 ---
 
