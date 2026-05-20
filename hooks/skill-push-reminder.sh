@@ -25,6 +25,6 @@ fi
 if [[ "$REAL_PATH" == "$SKILLS_REPO"* ]]; then
     cd "$SKILLS_REPO" || exit 0
     if [ -n "$(git status --porcelain 2>/dev/null)" ]; then
-        echo "BIOT EDIT: $REAL_PATH lives in biot-awesome-skills. Commit + push to remote (leductoan3082004/biot-awesome-skills) once edits are done — keeps hooks/AGENTS.md in sync across machines."
+        echo "BIOT EDIT: $REAL_PATH lives in biot-awesome-skills. Commit + push to remote (leductoan3082004/biot-awesome-skills) once edits are done — keeps hooks/CLAUDE.md/AGENTS.md/instructions in sync across machines."
     fi
 fi

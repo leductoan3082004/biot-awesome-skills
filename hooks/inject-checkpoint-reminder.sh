@@ -1,13 +1,13 @@
 #!/bin/bash
 # UserPromptSubmit hook: nudge the agent to run /context-save
 # after substantive turns. Authoritative policy lives in
-# ~/.claude/CLAUDE.md § "Context save policy".
+# biot-awesome-skills/instructions/context-save.md (routed from AGENTS.md).
 #
 # Stdout from this hook is appended to the model's context for the
 # current turn. The text is a per-turn reminder, not enforcement.
 
 cat <<'EOF'
-[context-save policy reminder — full rules in ~/.claude/CLAUDE.md § "Context save policy"]
+[context-save policy reminder — full rules in biot-awesome-skills/instructions/context-save.md]
 
 After completing the user's task this turn, judge whether SUBSTANTIVE
 work happened:
