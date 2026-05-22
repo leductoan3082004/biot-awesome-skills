@@ -4,27 +4,6 @@
 
 ---
 
-## MANDATORY TOOLING (read first — non-negotiable)
-
-Every Bash invocation MUST use modern CLI tools. Legacy equivalents are forbidden.
-
-| Use | Instead of | Why |
-|---|---|---|
-| `rg` (ripgrep) | `grep`, `grep -r`, `egrep`, `fgrep` | Faster, respects `.gitignore`, structured output (`--json`, `-l`, `-n`, `-t<type>`) |
-| `fd` | `find` | Faster, sane defaults, gitignore-aware, simple syntax |
-| `ast-grep` (`sg`) | regex codemods with `sed` / `rg --replace` on source code | Structural AST match — no false positives on whitespace/format variation |
-
-**Enforcement:**
-- "Search file contents" → `rg`. Never `grep -r`.
-- "Locate file by name / extension" → `fd`. Never `find`.
-- "Refactor / rename across a codebase" where target is a code construct (function call, import, JSX prop, etc.) → `ast-grep`. Regex is forbidden for code-structural changes.
-- Skip `bat`, `eza`, `fzf` — those are human ergonomics (color, interactivity) that pollute parseable output. Use the agent's native file-read tool instead.
-- Combo: `fd -e <ext> -x rg "<pattern>" {}` for "find files of type X containing Y".
-
-**Why mandatory:** `grep -r` walks `.git/`, `node_modules/`, build artifacts — wastes tokens and produces junk. `find` is slow and verbose. Regex codemods break silently on formatting variation. These failure modes are unacceptable.
-
----
-
 ## Always-on rules
 
 - **Authorship** — NEVER add an AI assistant as `Co-Authored-By` or generator footer on any commit. Author/committer must be the user's own git identity. Applies to every commit, amend, rebase, squash.
