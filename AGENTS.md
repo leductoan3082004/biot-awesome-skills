@@ -1,33 +1,52 @@
-# Agent Operating Instructions (Universal)
+# Agent Operating Instructions
 
-Vendor-neutral baseline for any coding agent (Claude Code, Codex, Cursor, etc.). Agent-specific layers (`CLAUDE.md`, future `CODEX.md`, …) `@`-import this file.
-
-Keep this router short. If you find yourself typing vendor-specific terms (`Opus`, `Sonnet`, `Anthropic`, `~/.claude/...`, Agent tool, hook system specifics) — that content does not belong here. Move it to the relevant companion file.
+**Sync rule:** When this file or anything under `/Users/toale/Developer/biot-awesome-skills/instructions/` is modified, commit + push to the remote in the same turn so other machines/sessions stay in sync.
 
 ---
 
-## Always-on universal rules
+## MANDATORY TOOLING (read first — non-negotiable)
+
+Every Bash invocation MUST use modern CLI tools. Legacy equivalents are forbidden.
+
+| Use | Instead of | Why |
+|---|---|---|
+| `rg` (ripgrep) | `grep`, `grep -r`, `egrep`, `fgrep` | Faster, respects `.gitignore`, structured output (`--json`, `-l`, `-n`, `-t<type>`) |
+| `fd` | `find` | Faster, sane defaults, gitignore-aware, simple syntax |
+| `ast-grep` (`sg`) | regex codemods with `sed` / `rg --replace` on source code | Structural AST match — no false positives on whitespace/format variation |
+
+**Enforcement:**
+- "Search file contents" → `rg`. Never `grep -r`.
+- "Locate file by name / extension" → `fd`. Never `find`.
+- "Refactor / rename across a codebase" where target is a code construct (function call, import, JSX prop, etc.) → `ast-grep`. Regex is forbidden for code-structural changes.
+- Skip `bat`, `eza`, `fzf` — those are human ergonomics (color, interactivity) that pollute parseable output. Use the agent's native file-read tool instead.
+- Combo: `fd -e <ext> -x rg "<pattern>" {}` for "find files of type X containing Y".
+
+**Why mandatory:** `grep -r` walks `.git/`, `node_modules/`, build artifacts — wastes tokens and produces junk. `find` is slow and verbose. Regex codemods break silently on formatting variation. These failure modes are unacceptable.
+
+---
+
+## Always-on rules
 
 - **Authorship** — NEVER add an AI assistant as `Co-Authored-By` or generator footer on any commit. Author/committer must be the user's own git identity. Applies to every commit, amend, rebase, squash.
 - **Five non-negotiables** — (1) Surface assumptions before non-trivial work. (2) Stop when confused — name the confusion, ask. (3) Push back when warranted — sycophancy is a failure mode. (4) Prefer boring — fewer lines, naive-correct over clever-fragile. (5) Scope discipline — touch only what the task requires.
-- **Save trigger** — Invoke `/context-save` before the final response after substantive work (code edit / decision / fix / refactor / finding). Skip for trivial replies, clarifying questions, read-only exploration. When in doubt → skip.
+- **Save trigger** — Invoke the save-context workflow before the final response after substantive work (code edit / decision / fix / refactor / finding). Skip for trivial replies, clarifying questions, read-only exploration. When in doubt → skip.
 - **Verification gate** — Task is incomplete until tests pass, build succeeds, runtime behavior matches expectations, lint/type-check is clean. "Seems right" is never sufficient.
-- **Completion discipline** — Verify with evidence before declaring done: structure → behavior → end-to-end path. Report what you changed, what you verified, what passed, what remains unverified. Full rules: `~/.claude/instructions/completion-discipline.md`.
-- **Clean session state** — Session not done until 5-dim Clean State Exit Check passes: verification + tests/checks + progress recorded + artifacts cleaned + startup path works. Emit Clean State Exit Report at session end. Full rules: `~/.claude/instructions/clean-session-state.md`.
+- **Completion discipline** — Verify with evidence before declaring done: structure → behavior → end-to-end path. Report what you changed, what you verified, what passed, what remains unverified. Full rules: `/Users/toale/Developer/biot-awesome-skills/instructions/completion-discipline.md`.
+- **Clean session state** — Session not done until 5-dim Clean State Exit Check passes: verification + tests/checks + progress recorded + artifacts cleaned + startup path works. Emit Clean State Exit Report at session end. Full rules: `/Users/toale/Developer/biot-awesome-skills/instructions/clean-session-state.md`.
 - **Process over prose** — Pick the workflow / skill that matches the task. Follow steps in order. Hit every checkpoint.
 - **One feature at a time** — Finish + end-to-end verify feature A before starting feature B. No opportunistic "also refactor" of unrelated code mid-feature.
 
 ---
 
-## On-demand universal instructions
+## On-demand instructions
 
-Read these files **before acting** in the relevant scope.
+Read these files **before acting** in the relevant scope. Paths are absolute — readable from any cwd by any agent tool with filesystem access.
 
 | Topic | File | Read when |
 |---|---|---|
-| Git commit policy (full text, examples, validation checklist) | `~/.claude/instructions/commit-policy.md` | Composing any commit message |
-| PR creation policy (template handling, accuracy rules, examples) | `~/.claude/instructions/pr-policy.md` | Opening or updating a PR |
-| Engineering discipline (anti-rationalization table, process-over-prose, verification, progressive disclosure, 5 non-negotiables expanded) | `~/.claude/instructions/engineering-discipline.md` | Starting non-trivial work — read once per session |
-| Completion discipline (verification checklist, definition of done, completion-report shape) | `~/.claude/instructions/completion-discipline.md` | Before declaring any task complete |
-| Clean session state (5-dim exit check, exit-report template, completion gate) | `~/.claude/instructions/clean-session-state.md` | Before ending a session or marking a task complete |
-| Context save policy (full trigger criteria, v3 layout, restore flow) | `~/.claude/instructions/context-save.md` | Before invoking `/context-save` |
+| Git commit policy (full text, examples, validation checklist) | `/Users/toale/Developer/biot-awesome-skills/instructions/commit-policy.md` | Composing any commit message |
+| PR creation policy (template handling, accuracy rules, examples) | `/Users/toale/Developer/biot-awesome-skills/instructions/pr-policy.md` | Opening or updating a PR |
+| Engineering discipline (anti-rationalization table, process-over-prose, verification, progressive disclosure, 5 non-negotiables expanded) | `/Users/toale/Developer/biot-awesome-skills/instructions/engineering-discipline.md` | Starting non-trivial work — read once per session |
+| Completion discipline (verification checklist, definition of done, completion-report shape) | `/Users/toale/Developer/biot-awesome-skills/instructions/completion-discipline.md` | Before declaring any task complete |
+| Clean session state (5-dim exit check, exit-report template, completion gate) | `/Users/toale/Developer/biot-awesome-skills/instructions/clean-session-state.md` | Before ending a session or marking a task complete |
+| Context save policy (full trigger criteria, v3 layout, restore flow) | `/Users/toale/Developer/biot-awesome-skills/instructions/context-save.md` | Before invoking the save-context workflow |
