@@ -21,11 +21,13 @@ the rules in:
 
 If you have not read that file this session, read it now.
 
-TL;DR (two surfaces, two formats):
-  - Chat UI (Markdown-rendered):  [label](/abs/path:line)
-    For paths with spaces:        [label](</abs/path with spaces:line>)
-  - Terminal code-walk anchor:    backticked /abs/path:line on its own
-                                  line directly above the fenced block.
+TL;DR — pick by AGENT, not by abstract surface:
+  - Codex (web/desktop chat UI):  [label](/abs/path:line)
+    Paths with spaces:            [label](</abs/path with spaces:line>)
+  - Claude Code (terminal CLI):   backticked /abs/path:line — on its
+                                  own line above a fenced block, or
+                                  inline. Markdown brackets/parens
+                                  break terminal semantic-history.
 
 Universal: absolute path, single-integer line (no ranges), no file:// URLs.
 EOF
