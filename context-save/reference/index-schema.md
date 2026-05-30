@@ -111,21 +111,48 @@ Bootstrap INDEX.json if missing:
 [ -f "$INDEX" ] || echo '{"schema":"context-save/v4","topics":{}}' > "$INDEX"
 ```
 
-## rebuild-index (self-heal)
+## rebuild-index (self-heal + initial migration)
 
-When INDEX.json is missing/stale, scan folders ONCE and regenerate from each
-`meta.json`:
+When INDEX.json is missing/stale, scan folders ONCE and regenerate. This is
+also the **migration entry point**: it MUST record BOTH v4 folders (have
+`meta.json` → `format:"eventlog"`) AND legacy v3 folders (have `context.md`,
+no `meta.json` → `format:"legacy-v3"`, fields read from the v3 frontmatter).
+Recording legacy folders is load-bearing — restore routes via INDEX only, so a
+v3 topic that is not in INDEX is unreachable and would be duplicated on save.
+
 ```bash
+# read one YAML frontmatter scalar from a v3 context.md
+fm() { rg -m1 "^$1:" "$2" 2>/dev/null | sed "s/^$1: *//; s/^[\"']//; s/[\"']$//"; }
+
 echo '{"schema":"context-save/v4","topics":{}}' > "$INDEX.tmp"
 for d in "$CKPT"/*/; do
-  m="$d/meta.json"; [ -f "$m" ] || continue
-  slug=$(basename "$d")
-  # pass slug via --arg; do NOT rely on jq input_filename (unreliable for folder)
-  row=$(jq --arg folder "$slug" '{title,summary,keywords,sessions,status,last_updated,branches,related_topics,format,folder:$folder}' "$m")
+  slug=$(basename "$d"); [ "$slug" = "archived" ] && continue
+  m="$d/meta.json"; ctx="$d/context.md"
+  if [ -f "$m" ]; then
+    # v4 folder
+    row=$(jq --arg folder "$slug" '{title,summary,keywords,sessions,status,last_updated,branches,related_topics,format,folder:$folder}' "$m")
+  elif [ -f "$ctx" ]; then
+    # legacy v3 folder — build a routable row from frontmatter
+    kw=$(fm keywords "$ctx" | sed 's/^\[//; s/\]$//')   # "a, b, c" or empty
+    row=$(jq -n --arg folder "$slug" \
+            --arg title "$(fm title "$ctx")" \
+            --arg summary "$(fm summary "$ctx")" \
+            --arg status "$(fm status "$ctx")" \
+            --arg lu "$(fm last_updated "$ctx")" \
+            --arg kw "$kw" \
+      '{title:$title, summary:$summary,
+        keywords:($kw|split(",")|map(gsub("^\\s+|\\s+$";""))|map(select(length>0))),
+        sessions:0, status:($status // "in-progress"),
+        last_updated:$lu, branches:[], related_topics:[],
+        format:"legacy-v3", folder:$folder}')
+  else
+    continue
+  fi
   jq --arg t "$slug" --argjson r "$row" '.topics[$t]=$r' "$INDEX.tmp" > "$INDEX.tmp2" && mv "$INDEX.tmp2" "$INDEX.tmp"
 done
 mv "$INDEX.tmp" "$INDEX"
 ```
-(Legacy-v3 folders without meta.json are rebuilt from their `context.md`
-frontmatter during lazy-convert; rebuild-index records them with
-`format:"legacy-v3"` until then.)
+
+Legacy rows route normally; the first save/restore that touches one triggers
+the one-time lazy-convert (save Step 3) which writes `meta.json` + logs and
+flips `format` to `eventlog`.

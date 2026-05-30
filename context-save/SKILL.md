@@ -55,7 +55,8 @@ Grammar + fold algorithm: **REQUIRED REFERENCE:** read
 ### Step 1 — Gather state
 Run git + infer this session's content:
 ```bash
-CKPT=~/.claude/projects/checkpoints; INDEX="$CKPT/INDEX.json"
+CKPT="${CONTEXT_CHECKPOINT_DIR:-$HOME/.claude/projects/checkpoints}"; INDEX="$CKPT/INDEX.json"
+mkdir -p "$CKPT"
 [ -f "$INDEX" ] || echo '{"schema":"context-save/v4","topics":{}}' > "$INDEX"
 BRANCH=$(git rev-parse --abbrev-ref HEAD 2>/dev/null||echo ""); COMMIT=$(git rev-parse --short HEAD 2>/dev/null||echo "")
 NOW=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
@@ -64,6 +65,10 @@ Infer: decisions (+ why/tradeoff), progress (open/done/blocked), results
 (check → verdict), init-commands, session summary/keywords.
 
 ### Step 2 — Route topic (read INDEX.json only)
+**First-run migration:** if `INDEX.json` was just bootstrapped empty but topic
+folders already exist on disk, run `rebuild-index` first (it imports existing
+v3 folders as routable `legacy-v3` rows). Skipping this makes an existing topic
+look "new" and spawns a duplicate.
 ```bash
 jq -r '.topics | to_entries[] | "\(.key)\t\(.value.summary)\t\(.value.keywords|join(","))"' "$INDEX"
 ```

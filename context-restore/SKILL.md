@@ -41,7 +41,10 @@ sub-agents so your context stays lean. Fold grammar: **REQUIRED REFERENCE**
 
 ### Step 1 — Route (read INDEX.json only)
 ```bash
-CKPT=~/.claude/projects/checkpoints; INDEX="$CKPT/INDEX.json"
+CKPT="${CONTEXT_CHECKPOINT_DIR:-$HOME/.claude/projects/checkpoints}"; INDEX="$CKPT/INDEX.json"
+# First-ever v4 run, or missing INDEX → rebuild-index first (imports legacy v3
+# folders as routable legacy-v3 rows; without this, existing topics are invisible).
+[ -f "$INDEX" ] || echo "INDEX missing — run /context-save rebuild-index, then re-route"
 jq -r '.topics | to_entries[] | "\(.key)\t\(.value.status)\t\(.value.last_updated)\t\(.value.summary)"' "$INDEX"
 ```
 Score rows against the task signal (summary + keywords + branch + recency).
