@@ -120,7 +120,8 @@ echo '{"schema":"context-save/v4","topics":{}}' > "$INDEX.tmp"
 for d in "$CKPT"/*/; do
   m="$d/meta.json"; [ -f "$m" ] || continue
   slug=$(basename "$d")
-  row=$(jq '{title,summary,keywords,sessions,status,last_updated,branches,related_topics,format,folder:input_filename|split("/")[-2]}' "$m")
+  # pass slug via --arg; do NOT rely on jq input_filename (unreliable for folder)
+  row=$(jq --arg folder "$slug" '{title,summary,keywords,sessions,status,last_updated,branches,related_topics,format,folder:$folder}' "$m")
   jq --arg t "$slug" --argjson r "$row" '.topics[$t]=$r' "$INDEX.tmp" > "$INDEX.tmp2" && mv "$INDEX.tmp2" "$INDEX.tmp"
 done
 mv "$INDEX.tmp" "$INDEX"
