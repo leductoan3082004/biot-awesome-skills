@@ -31,38 +31,42 @@ When in doubt, lean toward **skipping**. Over-saving creates noise.
 Missing one save is recoverable from git + memory; mis-saving every
 turn poisons the snapshot store with churn.
 
-**Layout (v3, topic-snapshot folders):**
+**Layout (v4, append-only event-log — ONE folder per topic):**
 
-Single global checkpoint dir — no per-project segregation.
+Single global checkpoint dir. One stable folder per topic (NOT per save —
+that was v3's folder explosion). Each save appends a dated block to the logs
+and patches one row in `INDEX.json`. Override the dir with
+`CONTEXT_CHECKPOINT_DIR` (for tests).
 
 ```
 ~/.claude/projects/checkpoints/
-  YYYY-MM-DD_HHMMSS-<topic-slug>/
-    context.md          # ≤500 lines, routing + summary
-    DECISIONS.md        # full decision log (carry-forward + new)
-    PROGRESS.md         # done / in-progress / open / blocked + session log
-    RESULTS.md          # test outputs, validations, command results
-    artifacts/          # optional: logs/ patches/ research/ snapshots/
+  INDEX.json                 # routing table — restore reads this, never scans folders
+  <topic-slug>/
+    meta.json                # title, summary, sessions, next_id, active_items, format
+    decisions.log            # append-only event blocks
+    progress.log             # append-only (open/done/block by stable #id)
+    results.log              # append-only (latest verdict per check)
+    artifacts/               # logs/ patches/ snapshots/
 ```
 
-Each save creates a NEW timestamped snapshot folder. The skill matches
-the current session to an existing topic automatically (across
-branches and commits) and carries forward decisions / progress /
-results / notes verbatim. Restore picks the latest folder per topic.
+Save is **O(1)**: append only, never re-read or re-write history. It learns
+prior item ids from `meta.json.active_items` (never from the logs). Current
+state is computed by `/context-restore` folding the logs (last-state-wins by
+`#id`).
 
-**How to save:** invoke the `/context-save` skill. Topic
-match is automatic; if the match is genuinely ambiguous the skill
-will AskUserQuestion. Otherwise it merges silently.
+**How to save:** invoke `/context-save`. Routes via `INDEX.json` (no folder
+scan); clear match → append; ambiguous → AskUserQuestion; no match → new topic
+folder. First-ever v4 run bootstraps `INDEX.json` and should
+`rebuild-index` to import existing topics.
 
-**How to resume:** invoke `/context-restore`. It scores
-candidate topics against the current task signal (summary +
-keywords + branch + recency), auto-loads when the winner is clear,
-and AskUserQuestions when ambiguous. Sibling files (DECISIONS /
-PROGRESS / RESULTS / artifacts) are lazy-loaded only after you opt
-in — `context.md` alone is read by default.
+**How to resume:** invoke `/context-restore`. Routes via `INDEX.json` only,
+then dispatches **parallel sub-agents** that each fold one log and return a
+capped digest — the main session never reads a raw `.log`. Related topics are
+surfaced as pointers, folded only on opt-in. Init commands are offered, never
+auto-run.
 
-Legacy single-file gstack checkpoint audits and v2 rolling
-`CURRENT-<topic-slug>.md` files are still readable by restore as
-fallbacks; new saves always write the v3 folder layout. Legacy files
-are never deleted by the save flow.
+**Migration from v3/legacy:** existing v3 folders (with `context.md`, no
+`meta.json`) are imported by `rebuild-index` as routable `format:"legacy-v3"`
+rows. The first save/restore that touches one triggers a one-time lazy-convert
+to the event-log layout; the original v3 files are never deleted.
 
