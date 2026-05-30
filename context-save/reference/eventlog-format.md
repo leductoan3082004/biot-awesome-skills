@@ -29,32 +29,37 @@ commit is allowed off-git).
 
 - Progress items and decisions carry a stable id `#N`, `N` monotonic **per
   topic**, sourced from `meta.json.next_id` (bump after assigning).
-- Cross-session reference to an item created in an earlier session: `sK#N`
-  (session K, item N). Within the same session, `#N` is sufficient.
-- Save learns the ids of still-active items from `meta.json.active_items`
-  (id → one-line text) — it does **not** read the logs to find them.
+- **The numeric id is the only thing the fold keys on.** The optional `sK`
+  session prefix (`sK#N`) is purely informational. A bare `#N` is always
+  valid and sufficient. Never read the logs just to recover an origin session
+  number — if you don't know it, use the bare `#N`.
+- `meta.json.active_items` is keyed by bare id (`"#2": "…"`). Save learns the
+  ids of still-active items from there — it does **not** read the logs.
 
 ## decisions.log events
 
 ```
 - [decision] #<N> <text>. why: <reason>. tradeoff: <tradeoff>.
-- [supersede s<K>#<M>] <text explaining the reversal>.
+- [supersede #<M>] <text explaining the reversal>.
 ```
 
 - `[decision]` adds an active decision.
-- `[supersede sK#M]` marks the referenced decision inactive (it stays on disk;
-  fold drops it from the active set).
+- `[supersede #M]` marks decision `#M` inactive (it stays on disk; fold drops
+  it from the active set). `[supersede sK#M]` is also accepted — the `sK` is
+  ignored by the fold.
 
 ## progress.log events
 
 ```
 - [open]  #<N> <text>
-- [done]  #<N> — <text> (was opened s<K>)
+- [done]  #<N> — <text>
 - [block] #<N> <text> — blocked on <reason>
 ```
 
 - `[open]` adds an open item. `[done]` closes it (last status per id wins).
 - `[block]` marks it blocked. Re-opening = a later `[open]` for the same id.
+- Optional ` (was opened sK)` trailing note is allowed but never required —
+  the fold keys on `#N`, not the session.
 
 ## results.log events
 
