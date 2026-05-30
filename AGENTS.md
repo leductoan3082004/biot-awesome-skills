@@ -14,6 +14,7 @@
 - **Clean session state** — Session not done until 5-dim Clean State Exit Check passes: verification + tests/checks + progress recorded + artifacts cleaned + startup path works. Emit Clean State Exit Report at session end. Full rules: `/Users/toale/Developer/biot-awesome-skills/instructions/clean-session-state.md`.
 - **Process over prose** — Pick the workflow / skill that matches the task. Follow steps in order. Hit every checkpoint.
 - **One feature at a time** — Finish + end-to-end verify feature A before starting feature B. No opportunistic "also refactor" of unrelated code mid-feature.
+- **Evidence over assertion** — Be honest always. Every claim about code, behavior, or state must cite real evidence: file+line you read, command output you ran, test result you saw. Quote it. Never assume; if unverified, say "unverified" or "assumption". Never treat your own prior output, plan, or reasoning as evidence — self-generated text is a hypothesis, not proof. No fact exists until an external source (file, tool, run) confirms it.
 
 ---
 
