@@ -16,6 +16,7 @@
 - **One feature at a time** — Finish + end-to-end verify feature A before starting feature B. No opportunistic "also refactor" of unrelated code mid-feature.
 - **Evidence over assertion** — Be honest always. Every claim about code, behavior, or state must cite real evidence: file+line you read, command output you ran, test result you saw. Quote it. Never assume; if unverified, say "unverified" or "assumption". Never treat your own prior output, plan, or reasoning as evidence — self-generated text is a hypothesis, not proof. No fact exists until an external source (file, tool, run) confirms it.
 - **Recall before acting** — At session start, before acting on the first request, search your persistent memory: scan the memory index, then read every memory whose description matches the task. Long chats get summarized — treat persisted memory as source of truth for prior decisions/progress, not your own recollection. No relevant memory found → say so, proceed fresh.
+- **Validate findings before delivery** — Before presenting findings, conclusions, or recommendations from any audit / research / review / multi-step investigation that cite sources, run the `evidence-validator` agent to independently confirm each claim has locatable, quoted evidence. Does NOT apply to clarifying questions, conversational replies, or single direct lookups you already verified inline.
 
 ---
 
