@@ -12,6 +12,7 @@
 - **Verification gate** — Task is incomplete until tests pass, build succeeds, runtime behavior matches expectations, lint/type-check is clean. "Seems right" is never sufficient.
 - **Completion discipline** — Verify with evidence before declaring done: structure → behavior → end-to-end path. Report what you changed, what you verified, what passed, what remains unverified. Full rules: `/Users/toale/Developer/biot-awesome-skills/instructions/completion-discipline.md`.
 - **Clean session state** — Session not done until 5-dim Clean State Exit Check passes: verification + tests/checks + progress recorded + artifacts cleaned + startup path works. Emit Clean State Exit Report at session end. Full rules: `/Users/toale/Developer/biot-awesome-skills/instructions/clean-session-state.md`.
+- **Stay in the working folder** — Never change the current working directory. Don't `cd` to a different folder, and don't run commands that switch the active directory out from under the session. Operate on other paths with absolute paths instead. The cwd the session started in is fixed for its lifetime.
 - **Process over prose** — Pick the workflow / skill that matches the task. Follow steps in order. Hit every checkpoint.
 - **One feature at a time** — Finish + end-to-end verify feature A before starting feature B. No opportunistic "also refactor" of unrelated code mid-feature.
 - **Evidence over assertion** — Be honest always. Every claim about code, behavior, or state must cite real evidence: file+line you read, command output you ran, test result you saw. Quote it. Never assume; if unverified, say "unverified" or "assumption". Never treat your own prior output, plan, or reasoning as evidence — self-generated text is a hypothesis, not proof. No fact exists until an external source (file, tool, run) confirms it.
@@ -33,3 +34,5 @@ Read these files **before acting** in the relevant scope. Paths are absolute —
 | Clean session state (5-dim exit check, exit-report template, completion gate) | `/Users/toale/Developer/biot-awesome-skills/instructions/clean-session-state.md` | Before ending a session or marking a task complete |
 | Context save policy (full trigger criteria, v3 layout, restore flow) | `/Users/toale/Developer/biot-awesome-skills/instructions/context-save.md` | Before invoking the save-context workflow |
 | Clickable file anchors (Markdown link for **Codex** chat UI, backticked path for **Claude Code** terminal CLI, spaces wrapping, no ranges/`file://`) | `/Users/toale/Developer/biot-awesome-skills/instructions/clickable-file-anchors.md` | Before emitting any file reference the user is meant to click |
+
+@RTK.md
