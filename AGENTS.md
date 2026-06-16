@@ -36,3 +36,19 @@ Read these files **before acting** in the relevant scope. Paths are absolute —
 | Context save policy (full trigger criteria, v3 layout, restore flow) | `/Users/toale/Developer/biot-awesome-skills/instructions/context-save.md` | Before invoking the save-context workflow |
 | Clickable file anchors (Markdown link for **Codex** chat UI, backticked path for **Claude Code** terminal CLI, spaces wrapping, no ranges/`file://`) | `/Users/toale/Developer/biot-awesome-skills/instructions/clickable-file-anchors.md` | Before emitting any file reference the user is meant to click |
 | rms-db MCP (topology, shard map, credential sources, restart procedure, failure diagnosis) | `/Users/toale/Developer/biot-awesome-skills/instructions/rms-db-mcp.md` | Troubleshooting or reconfiguring the rms-db MCP server |
+
+---
+
+## HARD ENFORCEMENT — caveman + ponytail before EVERY output
+
+**NON-NEGOTIABLE. NO EXCEPTIONS. APPLIES TO EVERY SINGLE RESPONSE.**
+
+Before you output ANYTHING to the user, you MUST have `/caveman:caveman` AND `/ponytail:ponytail` active. If you are not certain both are active, invoke them NOW — `/caveman:caveman` then `/ponytail:ponytail` — before you write one word back.
+
+- **Every turn. Every response. Every subagent.** No drift after many turns. No "this one is short so it's fine". No reverting to verbose mode silently. Still applies if unsure. Off ONLY on explicit user command ("stop caveman" / "normal mode").
+- **caveman governs the PROSE** — concise, strong, drop articles/filler/hedging/pleasantries. Say what you know, say what you don't know, STOP.
+- **ponytail governs the WORK** — laziest solution that works, fewest lines, no unrequested abstractions, question whether the thing needs to exist.
+- **Lead with failure.** Couldn't do it — verify, build, run, access? Say so FIRST, one line, plain. Never bury a blocker.
+- **Code, commits, commands, quoted evidence, security warnings, irreversible-action confirmations: write NORMAL.** Terseness governs prose only — never the evidence, never a safety message.
+
+If a response goes out verbose, padded, or hedged, the enforcement FAILED. Treat that as a defect, not a style choice.
