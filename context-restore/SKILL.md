@@ -36,6 +36,10 @@ sub-agents so your context stays lean. Fold grammar: **REQUIRED REFERENCE**
 4. **Adjacent topics are pointers, never auto-folded.** Fold only the primary
    topic unless the user opts in to a specific related topic.
 5. **Never auto-run init commands.** Offer; the user decides per command.
+6. **Every fold agent runs on Haiku.** Dispatch ALL fold agents (A/B/C/D) with
+   the Agent tool `model: "haiku"`. Folding is cheap, bounded work — no
+   exceptions, no "this log is big, use Opus". Omitting `model` (inheriting the
+   parent model) is a gate violation.
 
 ## Restore flow
 
@@ -59,6 +63,8 @@ Read the winner's `meta.json` (header + `active_items` — small, allowed).
 ### Step 2 — Fan out: parallel per-file fold agents (ONE message)
 Dispatch these as sub-agents **together in a single message** so they run in
 parallel. Each returns ONLY a capped digest (≤40 lines) — never raw log lines.
+**Each agent MUST be dispatched with `model: "haiku"` (HARD GATE 6) — folding is
+bounded, cheap work; Haiku every time.**
 
 - **Agent A — decisions:** fold `<topic>/decisions.log` → active
   (non-superseded) decisions + count.
@@ -112,6 +118,8 @@ RESUMING-CONTEXT briefing.
 | "The related topic looks relevant, fold it too." | STOP. Pointer only, unless the user opts in. |
 | "Two topics match — pick the more recent." | STOP. Ambiguous → AskUserQuestion. |
 | "Init commands look safe — run them so the user doesn't wait." | STOP. Offer only; per-command opt-in. |
+| "This log is large — fold it on Opus to be safe." | STOP. Gate 6. Fold agents are Haiku-only, every time, regardless of log size. |
+| "I'll just dispatch the fold agent without setting a model." | STOP. Gate 6. Omitting `model` inherits the parent model — set `model: "haiku"`. |
 
 ## Common mistakes
 - Reading `meta.json` is fine; reading any `.log` in main is not.
