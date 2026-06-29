@@ -53,13 +53,17 @@ These shards have working tunnels but no agencies assigned yet — ProxySQL drop
 
 **Dollar signs in passwords must be escaped as `$$` in `.env`** (docker-compose treats `$x` as variable interpolation).
 
-## Restart after credential changes
+## Restart service
+
+Managed via launchd, NOT Docker. Restart command:
 
 ```bash
-cd /Users/toale/Developer/rms-db-mcp && docker compose up -d --force-recreate
+launchctl kickstart -k gui/$(id -u)/com.axon.rms-db-mcp
 ```
 
-Wait for `docker inspect rms-db-mcp --format '{{.State.Health.Status}}'` → `healthy` before testing.
+Wait ~10s then verify: `launchctl list | grep com.axon.rms-db-mcp` — should show a new PID. Then recheck `mcp__rms-db__connection_status`.
+
+If connections are down and the user says "restart them" — run this command, wait, recheck status.
 
 ## Diagnosing connection failures
 
