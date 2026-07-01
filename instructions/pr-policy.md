@@ -2,6 +2,15 @@
 
 > Loaded on demand from `AGENTS.md` router. Read this file before opening or updating a PR.
 
+### Branch check — before touching any PR (open, update, or resolve a comment on)
+Before writing code, committing, or pushing in response to a PR (including a PR review-comment URL), verify the local checked-out branch **is** that PR's actual head branch.
+
+- `gh pr view <number> --json headRefName,headRefOid` (or parse the PR URL) → compare against `git branch --show-current` and `git rev-parse HEAD`.
+- Repos can have multiple branches stacked on top of each other with near-identical names/history. A stacked/downstream branch is NOT the PR's branch even if it shares ancestry.
+- Mismatch → stop. Do not edit, commit, or push. Either switch/checkout the correct branch (stash any local uncommitted work first, restore after) or tell the user the branches don't match and ask how to proceed.
+- Never assume "current branch" == "PR branch" from context alone (chat history, branch name similarity, `git log` showing the same commit message). Confirm with an actual `gh` lookup every time before the first write action against that PR.
+
+**Why:** Pushed fixes to a stacked-but-different branch than the PR under review; replied on the PR thread claiming the fix landed when it hadn't. Had to hard-reset + force-push to undo it.
 
 Every PR must give reviewers enough context to understand **what** changed, **why**, **how risky** it is, **how it was tested**, and **where to focus**. Optimize for reviewer usefulness, not form completion.
 
