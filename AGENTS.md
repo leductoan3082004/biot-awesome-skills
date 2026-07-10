@@ -43,6 +43,7 @@ Read these files **before acting** in the relevant scope. Paths are absolute —
 | Context save policy (full trigger criteria, v3 layout, restore flow) | `/Users/toale/Developer/biot-awesome-skills/instructions/context-save.md` | Before invoking the save-context workflow |
 | Clickable file anchors (Markdown link for **Codex** chat UI, backticked path for **Claude Code** terminal CLI, spaces wrapping, no ranges/`file://`) | `/Users/toale/Developer/biot-awesome-skills/instructions/clickable-file-anchors.md` | Before emitting any file reference the user is meant to click |
 | rms-db MCP (topology, shard map, credential sources, restart procedure, failure diagnosis) | `/Users/toale/Developer/biot-awesome-skills/instructions/rms-db-mcp.md` | Troubleshooting or reconfiguring the rms-db MCP server |
+| Composer subagent policy (use `@composer` via `agent` CLI instead of builtin subagents for large tasks; Haiku 4.5 exempt) | `/Users/toale/Developer/biot-awesome-skills/instructions/composer-subagent.md` | Deciding whether to spawn a subagent for a non-trivial task |
 
 ---
 
