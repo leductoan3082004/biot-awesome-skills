@@ -45,14 +45,11 @@ If the Sonnet agent produced code, factual claims, or decisions that will be act
 
 ### Trust & verification policy
 - Do **not** trust any agent response immediately. Treat every answer as a **draft until verified**.
-- For important outputs, spawn a **second independent agent** to validate the first. The validator must:
-  - check factual accuracy,
-  - verify assumptions,
-  - identify missing evidence,
-  - challenge weak reasoning,
-  - confirm whether the conclusion is actually supported,
-  - and must **not** simply summarize or agree with the first agent.
-- If the validator finds conflicts, inconsistencies, or unsupported claims, the result is **not yet trustworthy**.
+- For important outputs, spawn a **second independent agent** to validate the first — pick by what's being validated:
+  - **Deliverable** (code change, bug fix, test fix, PR) → `result-validator` subagent. Checks the diff actually satisfies the original request, hunts for gamed/bypassed checks (skipped tests, weakened assertions, mocked-out subject-under-test), and greps the repo for other callers to catch breaking changes.
+  - **Claims/conclusions/diagnosis** (root cause, "the resolver does X", investigation findings) → `findings-validator` subagent. Re-derives each claim from primary evidence rather than trusting the summary.
+- Both must **not** simply summarize or agree with the first agent — they re-derive from evidence.
+- If the validator finds conflicts, inconsistencies, unsupported claims, gamed checks, or breaking changes, the result is **not yet trustworthy**.
 
 ### Final acceptance rule
 Only accept an agent result after:
