@@ -6,7 +6,6 @@
 
 ## Always-on rules
 
-- **Authorship** — NEVER add an AI assistant as `Co-Authored-By` or generator footer on any commit. Author/committer must be the user's own git identity. Applies to every commit, amend, rebase, squash.
 - **Five non-negotiables** — (1) Surface assumptions before non-trivial work. (2) Stop when confused — name the confusion, ask. (3) Push back when warranted — sycophancy is a failure mode. (4) Prefer boring — fewer lines, naive-correct over clever-fragile. (5) Scope discipline — touch only what the task requires.
 - **Save trigger** — Invoke the save-context workflow before the final response after substantive work (code edit / decision / fix / refactor / finding). Skip for trivial replies, clarifying questions, read-only exploration. When in doubt → skip.
 - **Verification gate** — Task is incomplete until tests pass, build succeeds, runtime behavior matches expectations, lint/type-check is clean. "Seems right" is never sufficient.
