@@ -25,6 +25,7 @@
   - `mcp__k8s__*` — **ag1 and us2 only**. No us1 or other envs.
   - `mcp__rms-db__*` — **ag1 and us2 only**. No us1 or other envs.
   - `splunk-integration:splunk` — **ag1, us2, and us1**. Full env access.
+- **Named agent replies** — named agent (Agent tool with `name` param) is a mailbox teammate: plain text output stays local, does NOT auto-return. Must explicitly tell it to call SendMessage back (`to: <your-session-name>`), and may need a repeat nudge if it goes idle without doing so. Unnamed/background agent (no `name`) auto-returns final answer via task-notification — no nudge needed.
 
 ---
 
