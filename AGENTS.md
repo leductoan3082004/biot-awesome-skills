@@ -65,38 +65,13 @@ If a response goes out verbose, padded, or hedged, the enforcement FAILED. Treat
 
 ## Custom agents (`~/.claude/agents/`)
 
-These agents live at `/Users/toale/.claude/agents/` and are available in every session via the `Agent` tool.
+Available in every session via the `Agent` tool.
 
-| Agent | Model | When to use |
+| Agent | Model | Purpose |
 |---|---|---|
-| `test-designer` | claude-opus-5 | Design what to test from requirements — produces `TEST:` blocks with names, realistic data, preconditions, expected outcomes, and requirement traceability. Does NOT write code. Reads requirements first, code last (naming conventions only). |
-| `implementer` | claude-sonnet-4-6 | General-purpose implementer. Takes any task (feature, bug fix, refactor, test suite, or `test-designer` output) → writes code → runs all checks (tests, lint, typecheck) → self-reviews the full `git diff` before handoff. Does not commit/push/PR unless told. |
+| `test-designer` | claude-opus-5 | Designs what to test from requirements. Produces `TEST:` blocks — names, data, preconditions, outcomes, requirement traces. No code output. |
+| `implementer` | claude-sonnet-4-6 | General-purpose implementer. Features, bug fixes, refactors, test suites. Runs all checks, self-reviews before handoff. |
+| `result-validator` | opus | Audits a finished deliverable — did it satisfy the original request, honestly, without breaking other code. |
+| `findings-validator` | opus | Re-derives claims from primary evidence. Use to verify a diagnosis is actually true before acting on it. |
 
-### Usage rules
-
-- **Always run `test-designer` before writing any tests** — no exceptions. Never write tests directly from the implementation.
-- **Delegate to `implementer`** for multi-file tasks, full features, or test suites. **Self-implement** for small changes (≤10 tool calls) to avoid agent overhead.
-
-### Typical workflow
-
-```
-orchestrator
-  → test-designer   (design: what to test, from requirements)
-  → implementer     (write tests + feature, run checks, self-review)
-  → result-validator (optional: independent audit)
-```
-
-### Key constraints enforced by each agent
-
-**test-designer**
-- Reads requirements source before any code
-- Scans repo for existing fixtures; reuses by path+identifier
-- Bans placeholder data (`"test"`, `"foo"`, `1234`, etc.) in all `INPUT:` fields
-- Every `TEST:` block requires: name, requirement trace, preconditions, input, expected outcome, rationale, mock justification
-
-**implementer**
-- Discovers real test/lint/typecheck commands from repo config before running anything
-- Tests-first ordering: implement designed tests → watch them fail → implement feature → pass
-- Anti-gaming hard stop: no `.skip`/`.only`/loosened assertions/`--no-verify`
-- Self-review checklist over real `git diff`: design contract, data quality, no gaming, scope discipline, blast-radius scan
-- `UNVERIFIED` is a legal handoff state — never fabricates green
+To orchestrate these agents for a large task, invoke the `orchestrate` skill.
