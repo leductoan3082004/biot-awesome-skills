@@ -75,7 +75,7 @@ These agents live at `/Users/toale/.claude/agents/` and are available in every s
 ### Usage rules
 
 - **Always run `test-designer` before writing any tests** — no exceptions. Never write tests directly from the implementation.
-- **Delegate to `implementer`** for multi-file tasks, full features, or test suites. **Self-implement** for small changes (≤2 tool calls) to avoid agent overhead.
+- **Delegate to `implementer`** for multi-file tasks, full features, or test suites. **Self-implement** for small changes (≤10 tool calls) to avoid agent overhead.
 
 ### Typical workflow
 
