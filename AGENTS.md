@@ -72,6 +72,14 @@ These agents live at `/Users/toale/.claude/agents/` and are available in every s
 | `test-designer` | claude-opus-5 | Design what to test from requirements — produces `TEST:` blocks with names, realistic data, preconditions, expected outcomes, and requirement traceability. Does NOT write code. Reads requirements first, code last (naming conventions only). |
 | `implementer` | claude-sonnet-4-6 | General-purpose implementer. Takes any task (feature, bug fix, refactor, test suite, or `test-designer` output) → writes code → runs all checks (tests, lint, typecheck) → self-reviews the full `git diff` before handoff. Does not commit/push/PR unless told. |
 
+### When to delegate vs. self-implement
+
+**Delegate to `implementer`** when the task involves multiple files, a full feature, a test suite, or anything requiring a self-review pass before handoff.
+
+**Do it yourself** when the change is small — a one-liner fix, a single-file edit, a trivial config change. Spinning up an agent for a 3-line change wastes time and tokens.
+
+Rule of thumb: if you'd finish it in under 2 tool calls, do it yourself.
+
 ### Typical workflow
 
 ```
