@@ -60,3 +60,38 @@ Before you output ANYTHING to the user, you MUST have `/caveman:caveman` AND `/p
 - **Code, commits, commands, quoted evidence, security warnings, irreversible-action confirmations: write NORMAL.** Terseness governs prose only — never the evidence, never a safety message.
 
 If a response goes out verbose, padded, or hedged, the enforcement FAILED. Treat that as a defect, not a style choice.
+
+---
+
+## Custom agents (`~/.claude/agents/`)
+
+These agents live at `/Users/toale/.claude/agents/` and are available in every session via the `Agent` tool.
+
+| Agent | Model | When to use |
+|---|---|---|
+| `test-designer` | claude-opus-5 | Design what to test from requirements — produces `TEST:` blocks with names, realistic data, preconditions, expected outcomes, and requirement traceability. Does NOT write code. Reads requirements first, code last (naming conventions only). |
+| `implementer` | claude-sonnet-4-6 | General-purpose implementer. Takes any task (feature, bug fix, refactor, test suite, or `test-designer` output) → writes code → runs all checks (tests, lint, typecheck) → self-reviews the full `git diff` before handoff. Does not commit/push/PR unless told. |
+
+### Typical workflow
+
+```
+orchestrator
+  → test-designer   (what to test, from requirements)
+  → implementer     (write tests + feature, run checks, self-review)
+  → result-validator (optional: independent audit of the deliverable)
+```
+
+### Key constraints enforced by each agent
+
+**test-designer**
+- Reads requirements source before any code
+- Scans repo for existing fixtures; reuses by path+identifier
+- Bans placeholder data (`"test"`, `"foo"`, `1234`, etc.) in all `INPUT:` fields
+- Every `TEST:` block requires: name, requirement trace, preconditions, input, expected outcome, rationale, mock justification
+
+**implementer**
+- Discovers real test/lint/typecheck commands from repo config before running anything
+- Tests-first ordering: implement designed tests → watch them fail → implement feature → pass
+- Anti-gaming hard stop: no `.skip`/`.only`/loosened assertions/`--no-verify`
+- Self-review checklist over real `git diff`: design contract, data quality, no gaming, scope discipline, blast-radius scan
+- `UNVERIFIED` is a legal handoff state — never fabricates green
