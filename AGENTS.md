@@ -26,6 +26,7 @@
   - `mcp__rms-db__*` — **ag1 and us2 only**. No us1 or other envs.
   - `splunk-integration:splunk` — **ag1, us2, and us1**. Full env access.
 - **Named agent replies** — named agent (Agent tool with `name` param) is a mailbox teammate: plain text output stays local, does NOT auto-return. Must explicitly tell it to call SendMessage back (`to: <your-session-name>`), and may need a repeat nudge if it goes idle without doing so. Unnamed/background agent (no `name`) auto-returns final answer via task-notification — no nudge needed.
+- **CRITICAL — model selection by task phase.** Exploration/research/search (finding files, tracing code, grepping, reading logs, "where is X", codebase recon) = cheapest model available (haiku, gpt-5-mini, or equivalent). NEVER burn opus / sonnet / gpt-5-class tokens on exploration — no exceptions, no "just this once." Reserve moderate/expensive models (opus, sonnet, gpt-5) for validation, synthesis, and final handoff — steps where judgment quality actually matters. Applies to every model pick: direct model choice AND the `model` param on `Agent`/subagent calls. Violating this wastes budget on work that doesn't need it — treat it as a hard gate, not a preference.
 
 ---
 
