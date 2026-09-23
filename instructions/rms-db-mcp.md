@@ -17,25 +17,19 @@ Claude Code → HTTP :8056 → rms-db-mcp (Docker)
 - SSH auth: password-only (FIPS mode — no key auth)
 - Shards auto-discovered at startup by SSHing NOC and parsing `ps -aux | grep socat`
 
-## Shard → ProxySQL port map (maintained by Tom Phan)
+## Shards change — never hard-code them
 
-| Port | Shard |
-|------|-------|
-| 9307 | lmya  |
-| 9308 | lmyi  |
-| 9309 | lmyj  |
-| 9310 | lmyn  |
-| 9311 | lmyf  |
-| 9312 | lmyo  |
+Shards are auto-discovered from NOC socat processes at startup; `connection_status` shows the current set. Agencies get reassigned between shards, so never trust a stored shard name.
+
+- **Where does an agency live?** `config.attributes` on `lmyf` is authoritative (`dbhost` = shard, `dbname` = database). `resolve_agency` reads it live (`location_source: "config.attributes"`); JSON shard is only a fallback.
+- **Is a failing shard a problem?** Count agencies routed to it:
+  ```sql
+  SELECT attribute_value AS dbhost, COUNT(*) FROM config.attributes
+  WHERE attribute_key = 'dbhost' GROUP BY attribute_value;
+  ```
+  Shard absent from that result → no agency data routed there → MySQL errors on it (`2013 Lost connection`, timeout, `1045 Access denied`) are not user-impacting. Shard present → real outage, investigate.
 
 `lmyi` uses integrations MySQL credentials, not the standard zeke user.
-
-## Shards with 0 databases (expected, not broken)
-
-These shards have working tunnels but no agencies assigned yet — ProxySQL drops arbitrary queries (e.g. `SELECT 1 on information_schema`) when no default schema exists. `list_databases` returns `dbs=0`, which is the correct health check:
-
-- **AG1:** lmyo
-- **US2:** lmyj, lmyn
 
 ## Credentials (`.env` file)
 
@@ -100,7 +94,7 @@ def parse(line):
     return dec(f[1]),dec(f[2]),f[3]
 with open('/proc/net/tcp') as f: lines=f.readlines()[1:]
 ssh=[p for p in [parse(l) for l in lines] if p and ':22'==p[1][-3:] and p[2]=='01']
-print(f'SSH tunnels: {len(ssh)}')  # expect 14 (8 AG1 + 6 US2)
+print(f'SSH tunnels: {len(ssh)}')  # expect AG1 + US2 shard count from connection_status
 "
 ```
 
