@@ -51,17 +51,25 @@ These shards have working tunnels but no agencies assigned yet — ProxySQL drop
 | `INTEGRATIONS_MYSQL_PASSWORD_AG1` | `kubectl get secret -n rms tools -o jsonpath='{.data.mysql\.integrations\.password}' --context=az.ag1.main.va.rms \| base64 --decode` |
 | `INTEGRATIONS_MYSQL_PASSWORD_US2` | same with `--context=az.us2.main.ca.rms` |
 
-**Dollar signs in passwords must be escaped as `$$` in `.env`** (docker-compose treats `$x` as variable interpolation).
+**Do NOT escape `$` in `.env`** — `docker-compose.yml` loads it with `format: raw`, so values are passed literally.
 
 ## Restart service
 
-Managed via launchd, NOT Docker. Restart command:
+Runs in Docker only (container `rms-db-mcp`, `restart: unless-stopped` — auto-starts whenever Docker Desktop starts). Restart command:
 
 ```bash
-launchctl kickstart -k gui/$(id -u)/com.axon.rms-db-mcp
+docker compose -f /Users/toale/Developer/rms-db-mcp/docker-compose.yml restart
 ```
 
-Wait ~10s then verify: `launchctl list | grep com.axon.rms-db-mcp` — should show a new PID. Then recheck `mcp__rms-db__connection_status`.
+After changing a password in `.env`, recreate instead (`restart` does not re-read `.env`):
+
+```bash
+docker compose -f /Users/toale/Developer/rms-db-mcp/docker-compose.yml up -d --force-recreate
+```
+
+After changing `src/`, rebuild: `... up -d --build`.
+
+Wait ~30s then verify: `docker ps --filter name=rms-db-mcp` — should show `(healthy)`. Then recheck `mcp__rms-db__connection_status`.
 
 If connections are down and the user says "restart them" — run this command, wait, recheck status.
 
