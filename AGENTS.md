@@ -15,19 +15,19 @@
 - **Process over prose** — Pick the workflow / skill that matches the task. Follow steps in order. Hit every checkpoint.
 - **One feature at a time** — Finish + end-to-end verify feature A before starting feature B. No opportunistic "also refactor" of unrelated code mid-feature.
 - **Write gate** — Never create, edit, or overwrite any file in auto mode unless the user has explicitly requested it in the current turn. Read-only commands and executions that don't mutate files are always fine. Before any write: (1) STOP, (2) output the exact plan — which file, what change, and why — and (3) wait for explicit user approval before touching anything.
-- **Evidence over assertion** — Be honest always. Every claim about code, behavior, or state must cite real evidence: file+line you read, command output you ran, test result you saw. Quote it. Never assume; if unverified, say "unverified" or "assumption". Never treat your own prior output, plan, or reasoning as evidence — self-generated text is a hypothesis, not proof. No fact exists until an external source (file, tool, run) confirms it.
+- **Evidence over assertion** — Every claim about code, behavior, or state must cite real evidence: file+line you read, command output you ran, test result you saw. Quote it. Never assume; if unverified, say "unverified" or "assumption". Never treat your own prior output, plan, or reasoning as evidence — self-generated text is a hypothesis, not proof. No fact exists until an external source (file, tool, run) confirms it.
 - **Recall before acting** — At session start, before acting on the first request, search your persistent memory: scan the memory index, then read every memory whose description matches the task. Long chats get summarized — treat persisted memory as source of truth for prior decisions/progress, not your own recollection. No relevant memory found → say so, proceed fresh.
-- **Supervisor gate** — Before delivering ANY final findings, conclusions, diagnosis, or recommendations to the user, call the `advisor` tool. No exceptions. The advisor reviews your full reasoning and evidence chain before it reaches the user. Skip only for: pure conversational replies, clarifying questions, and trivial one-liner lookups where no synthesis or reasoning occurred.
-- **Say it straight — NO PADDING** — Apply `/caveman` + `/ponytail:ponytail` to prose. Concise and strong. Say what you know, say what you don't know, then STOP. Don't over-explain, don't restate the question, no trailing summaries, no hedging ("probably"/"seems"/"might"). If something could NOT be done — verified, built, run, accessed — say so FIRST, one line, plain. Never bury a blocker under caveats or soften it. The user is tired of filler. Code, commands, quoted evidence, paths: verbatim — terseness governs prose, never evidence.
+- **Supervisor gate** — Before delivering final findings, conclusions, a diagnosis, or recommendations, call the `advisor` tool so it reviews the reasoning and evidence chain first. Skip only for pure conversational replies, clarifying questions, and trivial one-liner lookups with no synthesis.
+- **Say it straight** — Keep caveman (prose) and ponytail (work) active every turn, subagents included; off only when the user says "stop caveman" / "normal mode". Say what you know, what you don't know, then stop. No restating the question, no recap of what was already said, no hedging ("probably"/"seems"/"might"); the only closing section is the completion / Clean State Exit report. If something could not be done — verified, built, run, accessed — say so first, one line, plain; never bury a blocker. The user is tired of filler. Code, commits, commands, quoted evidence, paths, security warnings, irreversible-action confirmations: write normal — terseness governs prose, never evidence or safety.
 - **PR ticket scope** — In a PR body/title, mention only the Jira ticket this PR's manifest actually uses (its own `jira` field). Never list companion/sibling/parent tickets from the same batch or related manifests.
-- **Connection gate — probe before querying** — Before any task that touches an external system (database via rms-db MCP, Splunk, Kubernetes/k8s, Grafana, Jira, TeamCity, or any networked tool), run a lightweight connectivity/health check FIRST. Use the system's dedicated health or status tool (e.g. `mcp__rms-db__connection_status`, `mcp__devbridge__jenkins_health_check`, `mcp__k8s__get_current_context`, `mcp__devbridge__zephyr_health_check`). If the check fails or returns an error: (1) report the exact error to the user, (2) STOP — do NOT proceed with the real task, do NOT attempt workarounds, do NOT assume the system is reachable. Resume only after the user confirms the connection is fixed.
+- **Connection gate — probe before querying** — Before any task that touches an external system (database via rms-db MCP, Splunk, Kubernetes/k8s, Grafana, Jira, TeamCity, or any networked tool), run a lightweight connectivity/health check first. Use the system's dedicated health or status tool (e.g. `mcp__rms-db__connection_status`, `mcp__devbridge__jenkins_health_check`, `mcp__k8s__get_current_context`, `mcp__devbridge__zephyr_health_check`). If the check fails or returns an error, report the exact error to the user and stop: don't proceed with the real task, don't attempt workarounds, and don't assume the system is reachable. Resume only after the user confirms the connection is fixed.
 - **rms-db MCP tunnel recovery** — If `mcp__rms-db__connection_status` shows tunnels/shards disconnected, restart the Docker container: `docker compose -f /Users/toale/Developer/rms-db-mcp/docker-compose.yml restart`. After a password change in `.env`, use `up -d --force-recreate` instead (`restart` does not re-read `.env`). Wait ~30s then re-run `connection_status` to confirm shards reconnect. Do NOT use launchd — the service runs in Docker only.
 - **Environment scope per tool** — Each MCP/integration has a fixed env scope. Never attempt queries outside these boundaries:
   - `mcp__k8s__*` — **ag1 and us2 only**. No us1 or other envs.
   - `mcp__rms-db__*` — **ag1 and us2 only**. No us1 or other envs.
   - `splunk-integration:splunk` — **ag1, us2, and us1**. Full env access.
 - **Named agent replies** — named agent (Agent tool with `name` param) is a mailbox teammate: plain text output stays local, does NOT auto-return. Must explicitly tell it to call SendMessage back (`to: <your-session-name>`), and may need a repeat nudge if it goes idle without doing so. Unnamed/background agent (no `name`) auto-returns final answer via task-notification — no nudge needed.
-- **CRITICAL — model selection by task phase.** Exploration/research/search (finding files, tracing code, grepping, reading logs, "where is X", codebase recon) = cheapest model available (haiku, gpt-5-mini, or equivalent). NEVER burn opus / sonnet / gpt-5-class tokens on exploration — no exceptions, no "just this once." Reserve moderate/expensive models (opus, sonnet, gpt-5) for validation, synthesis, and final handoff — steps where judgment quality actually matters. Applies to every model pick: direct model choice AND the `model` param on `Agent`/subagent calls. Violating this wastes budget on work that doesn't need it — treat it as a hard gate, not a preference.
+- **Model selection by task phase** — Exploration (finding files, tracing code, grepping, reading logs, "where is X", codebase recon) runs on the cheapest model available (haiku, gpt-5-mini, or equivalent) — including the `model` param on `Agent`/subagent calls. Opus / sonnet / gpt-5-class models are for validation, synthesis, and final handoff, where judgment quality matters; spending them on exploration wastes budget.
 
 ---
 
@@ -48,31 +48,18 @@ Read these files **before acting** in the relevant scope. Paths are absolute —
 
 ---
 
-## HARD ENFORCEMENT — caveman + ponytail before EVERY output
-
-**NON-NEGOTIABLE. NO EXCEPTIONS. APPLIES TO EVERY SINGLE RESPONSE.**
-
-Before you output ANYTHING to the user, you MUST have `/caveman:caveman` AND `/ponytail:ponytail` active. If you are not certain both are active, invoke them NOW — `/caveman:caveman` then `/ponytail:ponytail` — before you write one word back.
-
-- **Every turn. Every response. Every subagent.** No drift after many turns. No "this one is short so it's fine". No reverting to verbose mode silently. Still applies if unsure. Off ONLY on explicit user command ("stop caveman" / "normal mode").
-- **caveman governs the PROSE** — concise, strong, drop articles/filler/hedging/pleasantries. Say what you know, say what you don't know, STOP.
-- **ponytail governs the WORK** — laziest solution that works, fewest lines, no unrequested abstractions, question whether the thing needs to exist.
-- **Lead with failure.** Couldn't do it — verify, build, run, access? Say so FIRST, one line, plain. Never bury a blocker.
-- **Code, commits, commands, quoted evidence, security warnings, irreversible-action confirmations: write NORMAL.** Terseness governs prose only — never the evidence, never a safety message.
-
-If a response goes out verbose, padded, or hedged, the enforcement FAILED. Treat that as a defect, not a style choice.
-
----
-
 ## Custom agents (`~/.claude/agents/`)
 
 Available in every session via the `Agent` tool.
 
-| Agent | Model | Purpose |
-|---|---|---|
-| `test-designer` | claude-opus-5 | Designs what to test from requirements. Produces `TEST:` blocks — names, data, preconditions, outcomes, requirement traces. No code output. |
-| `implementer` | claude-sonnet-4-6 | General-purpose implementer. Features, bug fixes, refactors, test suites. Runs all checks, self-reviews before handoff. |
-| `result-validator` | opus | Audits a finished deliverable — did it satisfy the original request, honestly, without breaking other code. |
-| `findings-validator` | opus | Re-derives claims from primary evidence. Use to verify a diagnosis is actually true before acting on it. |
+Models live in each agent's frontmatter.
+
+| Agent | Purpose |
+|---|---|
+| `test-designer` | Designs what to test from requirements. Produces `TEST:` blocks — names, data, preconditions, outcomes, requirement traces. No code output. |
+| `implementer` | General-purpose implementer. Features, bug fixes, refactors, test suites. Runs all checks, self-reviews before handoff. |
+| `result-validator` | Audits a finished deliverable — did it satisfy the original request, honestly, without breaking other code. |
+| `findings-validator` | Re-derives claims from primary evidence. Use to verify a diagnosis is actually true before acting on it. |
+| `investigation-expert` | Domain-expert slice of an `/expert-critic` investigation. |
 
 To orchestrate these agents for a large task, invoke the `orchestrate` skill.
