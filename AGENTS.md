@@ -19,9 +19,7 @@
 - **Recall before acting** — At session start, before acting on the first request, search your persistent memory: scan the memory index, then read every memory whose description matches the task. Long chats get summarized — treat persisted memory as source of truth for prior decisions/progress, not your own recollection. No relevant memory found → say so, proceed fresh.
 - **Supervisor gate** — Before delivering final findings, conclusions, a diagnosis, or recommendations, call the `advisor` tool so it reviews the reasoning and evidence chain first. Skip only for pure conversational replies, clarifying questions, and trivial one-liner lookups with no synthesis.
 - **Say it straight** — Keep caveman (prose) and ponytail (work) active every turn, subagents included; off only when the user says "stop caveman" / "normal mode". Say what you know, what you don't know, then stop. No restating the question, no recap of what was already said, no hedging ("probably"/"seems"/"might"); the only closing section is the completion / Clean State Exit report. If something could not be done — verified, built, run, accessed — say so first, one line, plain; never bury a blocker. The user is tired of filler. Code, commits, commands, quoted evidence, paths, security warnings, irreversible-action confirmations: write normal — terseness governs prose, never evidence or safety.
-- **PR ticket scope** — In a PR body/title, mention only the Jira ticket this PR's manifest actually uses (its own `jira` field). Never list companion/sibling/parent tickets from the same batch or related manifests.
 - **Connection gate — probe before querying** — Before any task that touches an external system (database via rms-db MCP, Splunk, Kubernetes/k8s, Grafana, Jira, TeamCity, or any networked tool), run a lightweight connectivity/health check first. Use the system's dedicated health or status tool (e.g. `mcp__rms-db__connection_status`, `mcp__devbridge__jenkins_health_check`, `mcp__k8s__get_current_context`, `mcp__devbridge__zephyr_health_check`). If the check fails or returns an error, report the exact error to the user and stop: don't proceed with the real task, don't attempt workarounds, and don't assume the system is reachable. Resume only after the user confirms the connection is fixed.
-- **rms-db MCP tunnel recovery** — If `mcp__rms-db__connection_status` shows tunnels/shards disconnected, restart the Docker container: `docker compose -f /Users/toale/Developer/rms-db-mcp/docker-compose.yml restart`. After a password change in `.env`, use `up -d --force-recreate` instead (`restart` does not re-read `.env`). Wait ~30s then re-run `connection_status` to confirm shards reconnect. Do NOT use launchd — the service runs in Docker only.
 - **Environment scope per tool** — Each MCP/integration has a fixed env scope. Never attempt queries outside these boundaries:
   - `mcp__k8s__*` — **ag1 and us2 only**. No us1 or other envs.
   - `mcp__rms-db__*` — **ag1 and us2 only**. No us1 or other envs.
@@ -45,21 +43,3 @@ Read these files **before acting** in the relevant scope. Paths are absolute —
 | Context save policy (full trigger criteria, v3 layout, restore flow) | `/Users/toale/Developer/biot-awesome-skills/instructions/context-save.md` | Before invoking the save-context workflow |
 | Clickable file anchors (Markdown link for **Codex** chat UI, backticked path for **Claude Code** terminal CLI, spaces wrapping, no ranges/`file://`) | `/Users/toale/Developer/biot-awesome-skills/instructions/clickable-file-anchors.md` | Before emitting any file reference the user is meant to click |
 | rms-db MCP (topology, shard map, credential sources, restart procedure, failure diagnosis) | `/Users/toale/Developer/biot-awesome-skills/instructions/rms-db-mcp.md` | Troubleshooting or reconfiguring the rms-db MCP server |
-
----
-
-## Custom agents (`~/.claude/agents/`)
-
-Available in every session via the `Agent` tool.
-
-Models live in each agent's frontmatter.
-
-| Agent | Purpose |
-|---|---|
-| `test-designer` | Designs what to test from requirements. Produces `TEST:` blocks — names, data, preconditions, outcomes, requirement traces. No code output. |
-| `implementer` | General-purpose implementer. Features, bug fixes, refactors, test suites. Runs all checks, self-reviews before handoff. |
-| `result-validator` | Audits a finished deliverable — did it satisfy the original request, honestly, without breaking other code. |
-| `findings-validator` | Re-derives claims from primary evidence. Use to verify a diagnosis is actually true before acting on it. |
-| `investigation-expert` | Domain-expert slice of an `/expert-critic` investigation. |
-
-To orchestrate these agents for a large task, invoke the `orchestrate` skill.

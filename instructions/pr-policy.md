@@ -42,6 +42,7 @@ Produce a structured body with at minimum:
 - Do **not** claim work or testing that was not performed.
 - Do **not** omit caveats or risk signals.
 - If a detail cannot be verified, state that explicitly. **Do not fabricate.** Label assumptions and unknowns clearly.
+- **Ticket scope** — mention only the Jira ticket this PR's manifest actually uses (its own `jira` field). Never list companion/sibling/parent tickets from the same batch or related manifests.
 
 ### Reviewer-context rules
 Write for the reviewer. They should easily answer: What changed? Why? How risky? How validated? Where to focus? Add more context for risky/broad/behavior-changing PRs; keep small PRs concise but still specific.
