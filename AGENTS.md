@@ -25,7 +25,7 @@
   - `splunk-integration:splunk` — **ag1, us2, and us1**. Full env access.
 - **Named agent replies** — named agent (Agent tool with `name` param) is a mailbox teammate: plain text output stays local, does NOT auto-return. Must explicitly tell it to call SendMessage back (`to: <your-session-name>`), and may need a repeat nudge if it goes idle without doing so. Unnamed/background agent (no `name`) auto-returns final answer via task-notification — no nudge needed.
 - **Pi delegation for long-running work** — Prefer the `pi` CLI over a built-in subagent for delegated work that may take a long time or need several follow-ups. Pi runs tools without asking, so always pass a tool allowlist. Full rules: `/Users/toale/Developer/biot-awesome-skills/instructions/pi-delegation.md`.
-- **Model selection by task phase** — Exploration (finding files, tracing code, grepping, reading logs, "where is X", codebase recon) runs on the cheapest model available (haiku, gpt-5-mini, or equivalent) — including the `model` param on `Agent`/subagent calls. Opus / sonnet / gpt-5-class models are for validation, synthesis, and final handoff, where judgment quality matters; spending them on exploration wastes budget.
+- **Model selection by task phase** — Exploration (finding files, tracing code, grepping, reading logs, "where is X", codebase recon) runs on the cheapest model available (haiku, Pi's `kimi-k2-fast`, gpt-5-mini, or equivalent) — including the `model` param on `Agent`/subagent calls. Opus / sonnet / gpt-5-class models are for validation, synthesis, and final handoff, where judgment quality matters; spending them on exploration wastes budget.
 
 ---
 
