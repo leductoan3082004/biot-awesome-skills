@@ -47,6 +47,15 @@ Produce a structured body with at minimum:
 ### Reviewer-context rules
 Write for the reviewer. They should easily answer: What changed? Why? How risky? How validated? Where to focus? Add more context for risky/broad/behavior-changing PRs; keep small PRs concise but still specific.
 
+### Attaching images to a PR
+Use `gh pr edit --attach` (gh >= 2.99). It is the only CLI route to upload screenshots into a PR description.
+1. Save the image to a readable path (e.g. `~/Desktop/Screenshots/`). macOS capture temp folders (`.../TemporaryItems/NSIRD_screencaptureui_*`) are not readable.
+2. Fetch the body: `gh pr view <n> --json body -q .body > body.md`.
+3. Put a reference where the image goes: `![alt](/abs/path/shot.png)`.
+4. Run `gh pr edit <n> --body-file body.md --attach '/abs/path/shot.png#alt text'`. The reference path must match the `--attach` path; gh rewrites it to a `github.com/user-attachments/...` URL.
+5. Re-read the body (`gh pr view <n> --json body -q .body`) and confirm no local paths or leftover placeholders remain.
+- Crop out notification toasts and local-only details before uploading.
+
 ### Pre-submit validation
 - Title clear and accurate.
 - Body matches the actual work.
