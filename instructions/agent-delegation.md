@@ -6,10 +6,10 @@
 Delegate to sub-agents whenever practical to speed up work and keep the main context window lean. Use the `Agent` tool with the appropriate `subagent_type` (e.g., `Explore`, `general-purpose`, `Plan`, or a specialist reviewer).
 
 ### Model selection for delegated agents
-Pick the model based on task difficulty. The two allowed models are **Claude Opus 4.7** (1M context) and **Claude Sonnet 4.6**.
+Pick the model based on task difficulty. The two allowed models are **Claude Opus** (1M context) and **Claude Sonnet**.
 
-**Hard problems → Opus 4.7 at xhigh reasoning effort (from the start).**
-Use Opus 4.7 + xhigh when the task involves any of:
+**Hard problems → Opus at xhigh reasoning effort (from the start).**
+Use Opus + xhigh when the task involves any of:
 - deep research, multi-step analysis, or synthesis across sources,
 - ambiguous requirements or high-stakes decisions,
 - architecture / design / strategy / evaluation / judgment calls,
@@ -22,8 +22,8 @@ How to invoke:
 - Include an explicit instruction in the prompt such as: *"Use xhigh reasoning effort / maximum extended thinking for this task."*
 - Do **not** downgrade to a lower reasoning effort to save tokens unless the user has explicitly authorized it.
 
-**Easy tasks → Sonnet 4.6 (faster/cheaper), with Opus review when correctness matters.**
-Use Sonnet 4.6 for clearly scoped, low-risk work:
+**Easy tasks → Sonnet (faster/cheaper), with Opus review when correctness matters.**
+Use Sonnet for clearly scoped, low-risk work:
 - mechanical refactors with obvious shape,
 - formatting, renaming, boilerplate generation,
 - running commands / scripting with a known recipe,
@@ -36,12 +36,12 @@ How to invoke:
 - Keep the prompt narrow and action-oriented with clear acceptance criteria.
 
 **Review rule for Sonnet output:**
-If the Sonnet agent produced code, factual claims, or decisions that will be acted on, spawn a **second agent on Opus 4.7 at xhigh** to review the work before you trust it. The reviewer follows the Trust & Verification policy below — independent check, not a rubber stamp. Skip the Opus review only when the output is purely mechanical and trivially verifiable at a glance (e.g., a one-line format fix).
+If the Sonnet agent produced code, factual claims, or decisions that will be acted on, spawn a **second agent on Opus at xhigh** to review the work before you trust it. The reviewer follows the Trust & Verification policy below — independent check, not a rubber stamp. Skip the Opus review only when the output is purely mechanical and trivially verifiable at a glance (e.g., a one-line format fix).
 
-**When in doubt about difficulty → default to Opus 4.7 + xhigh.** A small amount of over-spend on easy tasks is cheaper than an unnoticed wrong answer on a hard one.
+**When in doubt about difficulty → default to Opus + xhigh.** A small amount of over-spend on easy tasks is cheaper than an unnoticed wrong answer on a hard one.
 
 **Always prohibited:**
-- Using any model other than Opus 4.7 or Sonnet 4.6 for delegated agents.
+- Using any model other than Opus or Sonnet for delegated agents.
 
 ### Trust & verification policy
 - Do **not** trust any agent response immediately. Treat every answer as a **draft until verified**.
@@ -59,4 +59,4 @@ Only accept an agent result after:
 4. unresolved uncertainty is explicitly called out.
 
 ### Operating principle
-Delegate to protect context. Hard problems → Opus 4.7 + xhigh from the start. Easy tasks → Sonnet 4.6, then have Opus 4.7 + xhigh review the result when it matters. Validate before trusting. When confidence matters, use one agent to produce and another to verify.
+Delegate to protect context. Hard problems → Opus + xhigh from the start. Easy tasks → Sonnet, then have Opus + xhigh review the result when it matters. Validate before trusting. When confidence matters, use one agent to produce and another to verify.
