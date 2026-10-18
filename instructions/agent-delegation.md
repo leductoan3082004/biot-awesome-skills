@@ -6,10 +6,17 @@
 Delegate to sub-agents whenever practical to speed up work and keep the main context window lean. Use the `Agent` tool with the appropriate `subagent_type` (e.g., `Explore`, `general-purpose`, `Plan`, or a specialist reviewer).
 
 ### Model selection for delegated agents
-Pick the model based on task difficulty. The two allowed models are **Claude Opus** (1M context) and **Claude Sonnet**.
+Match the model to the task phase. Lightweight work never goes to a heavy model.
 
-**Hard problems → Opus at xhigh reasoning effort (from the start).**
-Use Opus + xhigh when the task involves any of:
+**Lightweight work → `haiku` (latest) or `luna` (latest), at medium effort.**
+Use for exploration (finding files, tracing code, grepping, reading logs, codebase recon) and any simple, mechanical task.
+
+How to invoke:
+- Pass `model: "haiku"` or `model: "luna"` and `effort: "medium"` to the `Agent` tool.
+- Keep the prompt narrow and action-oriented with clear acceptance criteria.
+
+**Hard problems and judgment → `opus` at high effort (from the start).**
+Use Opus + high when the task involves any of:
 - deep research, multi-step analysis, or synthesis across sources,
 - ambiguous requirements or high-stakes decisions,
 - architecture / design / strategy / evaluation / judgment calls,
@@ -18,30 +25,24 @@ Use Opus + xhigh when the task involves any of:
 - anything the user has explicitly flagged as important.
 
 How to invoke:
-- Pass `model: "opus"` to the `Agent` tool.
-- Include an explicit instruction in the prompt such as: *"Use xhigh reasoning effort / maximum extended thinking for this task."*
+- Pass `model: "opus"` and `effort: "high"` to the `Agent` tool.
 - Do **not** downgrade to a lower reasoning effort to save tokens unless the user has explicitly authorized it.
 
-**Easy tasks → Sonnet (faster/cheaper), with Opus review when correctness matters.**
-Use Sonnet for clearly scoped, low-risk work:
-- mechanical refactors with obvious shape,
-- formatting, renaming, boilerplate generation,
-- running commands / scripting with a known recipe,
-- small, local bug fixes in well-understood code,
-- summarization or transformation of explicit inputs,
-- routine lookups where the answer is findable and verifiable.
+**Validation and synthesis → `sonnet` or `opus`.** Sonnet is the heavy option when Opus is more than the check needs. Pick Opus when correctness matters.
 
-How to invoke:
-- Pass `model: "sonnet"` to the `Agent` tool.
-- Keep the prompt narrow and action-oriented with clear acceptance criteria.
+**Review rule for lightweight output:**
+If a `haiku` or `luna` agent produced code, factual claims, or decisions that will be acted on, spawn a **second agent on Opus at high effort** to review the work before you trust it. The reviewer follows the Trust & Verification policy below — independent check, not a rubber stamp. Skip the review only when the output is purely mechanical and trivially verifiable at a glance (e.g., a one-line format fix).
 
-**Review rule for Sonnet output:**
-If the Sonnet agent produced code, factual claims, or decisions that will be acted on, spawn a **second agent on Opus at xhigh** to review the work before you trust it. The reviewer follows the Trust & Verification policy below — independent check, not a rubber stamp. Skip the Opus review only when the output is purely mechanical and trivially verifiable at a glance (e.g., a one-line format fix).
-
-**When in doubt about difficulty → default to Opus + xhigh.** A small amount of over-spend on easy tasks is cheaper than an unnoticed wrong answer on a hard one.
+**When in doubt about difficulty → default to Opus + high.** A small amount of over-spend is cheaper than an unnoticed wrong answer on a hard one.
 
 **Always prohibited:**
-- Using any model other than Opus or Sonnet for delegated agents.
+- Spawning a heavy model (Opus, Sonnet, Fable, or any gpt-6-class model) for a lightweight task.
+- Using `haiku` or `luna` for hard problems, validation, or synthesis.
+- Using `high` effort on any model other than `opus`.
+
+### Named agent replies
+A named agent (Agent tool with `name` param) is a mailbox teammate: plain text output stays local and does NOT auto-return. Tell it explicitly to call SendMessage back (`to: <your-session-name>`). It may need a repeat nudge if it goes idle without doing so.
+An unnamed/background agent (no `name`) auto-returns its final answer via task-notification. No nudge needed.
 
 ### Trust & verification policy
 - Do **not** trust any agent response immediately. Treat every answer as a **draft until verified**.
@@ -59,4 +60,4 @@ Only accept an agent result after:
 4. unresolved uncertainty is explicitly called out.
 
 ### Operating principle
-Delegate to protect context. Hard problems → Opus + xhigh from the start. Easy tasks → Sonnet, then have Opus + xhigh review the result when it matters. Validate before trusting. When confidence matters, use one agent to produce and another to verify.
+Delegate to protect context. Lightweight work → haiku or luna at medium effort. Hard problems → Opus at high effort from the start. Validation and synthesis → Opus or Sonnet. Validate before trusting. When confidence matters, use one agent to produce and another to verify.

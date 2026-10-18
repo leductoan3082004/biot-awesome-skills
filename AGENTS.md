@@ -22,8 +22,6 @@
   - `mcp__k8s__*` — **ag1 and us2 only**. No us1 or other envs.
   - `mcp__rms-db__*` — **ag1 and us2 only**. No us1 or other envs.
   - `splunk-integration:splunk` — **ag1, us2, and us1**. Full env access.
-- **Named agent replies** — named agent (Agent tool with `name` param) is a mailbox teammate: plain text output stays local, does NOT auto-return. Must explicitly tell it to call SendMessage back (`to: <your-session-name>`), and may need a repeat nudge if it goes idle without doing so. Unnamed/background agent (no `name`) auto-returns final answer via task-notification — no nudge needed.
-- **Model selection by task phase** — Lightweight work always runs on a lightweight model. Lightweight = exploration (finding files, tracing code, grepping, reading logs, "where is X", codebase recon) and any simple, mechanical task. Use `haiku` (latest) or `luna` (latest) at medium effort, via the `model` / `effort` params on `Agent` calls. `high` effort is for `opus` only. Never spawn a heavy model (Opus, Sonnet, Fable, or any gpt-6-class model) for a lightweight task. Heavy models are for validation, synthesis, and final handoff, where judgment quality matters.
 
 ---
 
@@ -35,8 +33,8 @@ Read these files **before acting** in the relevant scope. Paths are absolute —
 |---|---|---|
 | Git commit policy (full text, examples, validation checklist) | `/Users/toale/Developer/biot-awesome-skills/instructions/commit-policy.md` | Composing any commit message |
 | PR creation policy (template handling, accuracy rules, examples) | `/Users/toale/Developer/biot-awesome-skills/instructions/pr-policy.md` | Opening or updating a PR |
+| Sub-agent delegation (model selection by task phase, named agent replies, trust & verification) | `/Users/toale/Developer/biot-awesome-skills/instructions/agent-delegation.md` | Before spawning any sub-agent via the Agent tool |
 | Engineering discipline (anti-rationalization table, process-over-prose, verification, progressive disclosure, 5 non-negotiables expanded) | `/Users/toale/Developer/biot-awesome-skills/instructions/engineering-discipline.md` | Starting non-trivial work — read once per session |
 | Completion discipline (verification checklist, definition of done, completion-report shape) | `/Users/toale/Developer/biot-awesome-skills/instructions/completion-discipline.md` | Before declaring any task complete |
 | Clean session state (5-dim exit check, exit-report template, completion gate) | `/Users/toale/Developer/biot-awesome-skills/instructions/clean-session-state.md` | Before ending a session or marking a task complete |
-| Clickable file anchors (Markdown link for **Codex** chat UI, backticked path for **Claude Code** terminal CLI, spaces wrapping, no ranges/`file://`) | `/Users/toale/Developer/biot-awesome-skills/instructions/clickable-file-anchors.md` | Before emitting any file reference the user is meant to click |
 | rms-db MCP (topology, shard map, credential sources, restart procedure, failure diagnosis) | `/Users/toale/Developer/biot-awesome-skills/instructions/rms-db-mcp.md` | Troubleshooting or reconfiguring the rms-db MCP server |
