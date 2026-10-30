@@ -42,7 +42,9 @@ Produce a structured body with at minimum:
 - Do **not** claim work or testing that was not performed.
 - Do **not** omit caveats or risk signals.
 - If a detail cannot be verified, state that explicitly. **Do not fabricate.** Label assumptions and unknowns clearly.
-- **Jira ticket required** — Every PR title or body must reference its Jira ticket key (e.g. `RMS-1234`). Take it from the branch name, the manifest's `jira` field, or the user. No key found → ask the user before opening the PR; never open one without it and never invent one.
+- **Jira ticket required** — Every PR title or body must reference its Jira ticket key (e.g. `RMS-1234`). Take it from the branch name, the manifest's `jira` field, or the user. Never guess or invent a key, and never open a PR without one.
+  - Key missing → stop and ask the user. Or search Jira (Jira MCP, after the connection check) for likely matches using the branch name, commit messages, and changed areas, then present 2–4 candidates (key + summary) and let the user choose. Do not pick one yourself.
+  - User wants a new ticket → create it with the Jira MCP, as a sub-task under the main/parent ticket when one exists (ask the user for the parent key if unclear). Create a standalone ticket only if the user says there is no parent. Show the user the new key before using it in the PR.
 - **Ticket scope** — mention only the Jira ticket this PR's manifest actually uses (its own `jira` field). Never list companion/sibling/parent tickets from the same batch or related manifests.
 
 ### Reviewer-context rules
