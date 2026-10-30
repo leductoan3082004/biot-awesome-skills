@@ -49,6 +49,16 @@ Load only the context you need, when you need it. Don't front-load everything.
 - Don't read every reference file at session start.
 - Delegate to sub-agents to keep the main context window lean.
 
+### Code comments
+
+Make the code explain itself: clear names, small functions, types. Reach for a rename or an extract before a comment.
+
+Comment only what the code cannot say:
+- a product decision or tradeoff (why this approach, not another),
+- an edge case or invisible constraint a reviewer or later developer is likely to question (empty input, partial failure, ordering, backward compatibility, external-system behavior).
+
+Never restate the code, narrate steps, or document parameters that names and types already cover. Match the comment density of the surrounding code. Review-side bar: `REVIEW.md` (In-code comments).
+
 ### Five non-negotiables
 
 These apply at all times, across all tasks:
