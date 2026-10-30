@@ -51,7 +51,7 @@ Load only the context you need, when you need it. Don't front-load everything.
 
 ### Response length (hard rule)
 
-Say enough, no more. Stay high level; give detail only when asked.
+Say enough, no more. Answer the question that was actually asked, correctly, first. Then go from high level to detail as far as the limit allows. Go deeper when the user asks, but the ceiling below still applies.
 
 - Simple question: under 100 words.
 - Complex question: under 200 words.
