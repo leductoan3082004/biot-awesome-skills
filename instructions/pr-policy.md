@@ -42,6 +42,7 @@ Produce a structured body with at minimum:
 - Do **not** claim work or testing that was not performed.
 - Do **not** omit caveats or risk signals.
 - If a detail cannot be verified, state that explicitly. **Do not fabricate.** Label assumptions and unknowns clearly.
+- **Jira ticket required** — Every PR title or body must reference its Jira ticket key (e.g. `RMS-1234`). Take it from the branch name, the manifest's `jira` field, or the user. No key found → ask the user before opening the PR; never open one without it and never invent one.
 - **Ticket scope** — mention only the Jira ticket this PR's manifest actually uses (its own `jira` field). Never list companion/sibling/parent tickets from the same batch or related manifests.
 
 ### Reviewer-context rules
@@ -58,6 +59,7 @@ Use `gh pr edit --attach` (gh >= 2.99). It is the only CLI route to upload scree
 
 ### Pre-submit validation
 - Title clear and accurate.
+- Jira ticket key present.
 - Body matches the actual work.
 - Template used if one exists.
 - Relevant sections filled meaningfully.
