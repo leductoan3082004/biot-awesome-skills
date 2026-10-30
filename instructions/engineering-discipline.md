@@ -49,6 +49,16 @@ Load only the context you need, when you need it. Don't front-load everything.
 - Don't read every reference file at session start.
 - Delegate to sub-agents to keep the main context window lean.
 
+### Response length (hard rule)
+
+Say enough, no more. Stay high level; give detail only when asked.
+
+- Simple question: under 100 words.
+- Complex question: under 200 words.
+- Hard ceiling: 400 words, only when the answer cannot fit otherwise.
+
+Code, commands, quoted evidence, and the completion / Clean State Exit report do not count toward the limit.
+
 ### Code comments
 
 Make the code explain itself: clear names, small functions, types. Reach for a rename or an extract before a comment.
